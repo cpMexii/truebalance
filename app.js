@@ -554,7 +554,7 @@
       const monthIndex = item.month !== undefined ? number(item.month) : fallbackMonth;
       const date = monthIndex === null ? "—" : `${SHORT_MONTHS[monthIndex]} ${number(item.day)}`;
       const categoryOptions = [...new Set([item.category, ...data.categories.expense].filter(Boolean))];
-      return `<tr><td>${date}</td><td><select class="transaction-category-select" data-transaction-category="${escapeHtml(item.id)}" data-month="${monthIndex}" aria-label="Change category for ${escapeHtml(item.description || "transaction")}">${categoryOptions.map(category => `<option value="${escapeHtml(category)}" ${category === item.category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}</select></td><td>${escapeHtml(item.description || "—")}</td><td class="numeric">${escapeHtml(formatMoney(item.amount))}</td><td class="actions"><button class="delete-icon" title="Delete transaction" data-action="delete-transaction" data-id="${escapeHtml(item.id)}" data-month="${monthIndex}">×</button></td></tr>`;
+      return `<tr><td>${date}</td><td><select class="transaction-category-select" data-transaction-category="${escapeHtml(item.id)}" data-month="${monthIndex}" aria-label="Change category for ${escapeHtml(item.description || "transaction")}">${categoryOptions.map(category => `<option value="${escapeHtml(category)}" ${category === item.category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}</select></td><td>${escapeHtml(item.description || "—")}</td><td class="numeric">${escapeHtml(formatMoney(item.amount))}</td><td class="actions"><div class="row-actions"><button class="edit-icon" title="Edit transaction" aria-label="Edit transaction" data-action="edit-transaction" data-id="${escapeHtml(item.id)}" data-month="${monthIndex}">✎</button><button class="delete-icon" title="Delete transaction" aria-label="Delete transaction" data-action="delete-transaction" data-id="${escapeHtml(item.id)}" data-month="${monthIndex}">×</button></div></td></tr>`;
     }).join("")}</tbody></table>`;
   }
 
@@ -839,6 +839,7 @@
   function handleAction(button) {
     const action = button.dataset.action;
     if (action === "add-transaction") openTransactionModal(state.view === "monthly" ? state.month : undefined);
+    if (action === "edit-transaction") openEditTransactionModal(button.dataset.id, number(button.dataset.month));
     if (action === "add-income") openIncomeModal(state.month);
     if (action === "add-recurring") openRecurringModal(button.dataset.kind);
     if (action === "delete-transaction") deleteTransaction(button.dataset.id, number(button.dataset.month));
@@ -969,6 +970,36 @@
       closeModal();
       render();
       toast("Transaction added");
+    });
+    modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
+  }
+
+  function openEditTransactionModal(id, originalMonthIndex) {
+    const transaction = monthData(originalMonthIndex).transactions.find(item => item.id === id);
+    if (!transaction) { toast("Transaction could not be found"); return; }
+    openModal("Edit transaction", "UPDATE EXPENSE", `<div class="form-grid">
+      <div class="field"><label>Month</label><select name="month">${MONTHS.map((month,index) => `<option value="${index}" ${index===originalMonthIndex ? "selected" : ""}>${month}</option>`).join("")}</select></div>
+      <div class="field"><label>Day</label><input name="day" type="number" min="1" max="31" value="${number(transaction.day)}" required></div>
+      <div class="field"><label>Category</label><select name="category">${data.categories.expense.map(category => `<option value="${escapeHtml(category)}" ${category===transaction.category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}</select></div>
+      <div class="field"><label>Amount</label><input name="amount" type="number" min="0.01" step="0.01" value="${number(transaction.amount)}" required></div>
+      <div class="field span-2"><label>Description</label><input name="description" maxlength="100" value="${escapeHtml(transaction.description || "")}" placeholder="What was this for?"></div>
+    </div><div class="modal-actions"><button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">Save changes</button></div>`, form => {
+      const selectedMonth = number(form.get("month"));
+      const maxDay = new Date(number(data.settings.year), selectedMonth + 1, 0).getDate();
+      const updated = {
+        ...transaction,
+        day: Math.min(maxDay, Math.max(1, number(form.get("day")))),
+        category: String(form.get("category")),
+        amount: Math.max(0.01, number(form.get("amount"))),
+        description: String(form.get("description") || "").trim()
+      };
+      monthData(originalMonthIndex).transactions = monthData(originalMonthIndex).transactions.filter(item => item.id !== id);
+      monthData(selectedMonth).transactions.push(updated);
+      state.month = selectedMonth;
+      saveData();
+      closeModal();
+      render();
+      toast("Transaction updated");
     });
     modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
   }
