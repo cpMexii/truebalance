@@ -10,7 +10,7 @@
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
   const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","calendar","categories"];
   const VIEW_META = {
-    dashboard: ["OVERVIEW", "Annual dashboard"],
+    dashboard: ["OVERVIEW", "Dashboard"],
     monthly: ["PLAN & TRACK", "Monthly budget"],
     transactions: ["ACTIVITY", "Transactions"],
     recurring: ["RECURRING PAYMENTS", "Bills & subscriptions"],
@@ -109,7 +109,8 @@
     transactionMonth: "all",
     transactionCategory: "all",
     calendarMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
-    recurringMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0
+    recurringMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
+    dashboardMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0
   };
 
   function saveData(showConfirmation = false, skipCloud = false) {
@@ -400,6 +401,7 @@
     const highestExpenseIndex = monthExpenses.indexOf(Math.max(...monthExpenses));
     const net = annual.income - annual.expenses;
     const expenseBreakdown = annualExpenseBreakdown();
+    const monthlyExpenseBreakdown = expenseBreakdownForMonth(state.dashboardMonth);
     const incomeBreakdown = categoryAnnualTotals("income");
     return `<div class="page-stack">
       <div class="section-heading"><div><h2>${escapeHtml(data.settings.name)}</h2><p>Your ${data.settings.year} plan at a glance. Every figure updates as you enter monthly data.</p></div><div class="section-actions"><button class="ghost-button" data-action="print">Print dashboard</button><button class="secondary-button" data-view-jump="monthly">Open monthly planner</button></div></div>
@@ -414,6 +416,7 @@
         <article class="card"><div class="card-header"><div><h3>Cash flow by month</h3><p>Income compared with actual spending</p></div><span class="status-badge ${net >= 0 ? "paid" : "due"}">${net >= 0 ? "Positive" : "Negative"}</span></div><div class="card-body chart-wrap">${renderLineChart(monthIncome, monthExpenses)}</div></article>
         <article class="card"><div class="card-header"><div><h3>Annual spending</h3><p>Actual expenses by category</p></div></div><div class="card-body">${renderDonut(expenseBreakdown)}</div></article>
       </section>
+      <article class="card monthly-spending-card"><div class="card-header"><div><h3>Monthly spending</h3><p>Actual expenses by category for ${MONTHS[state.dashboardMonth]}</p></div><select id="dashboardSpendingMonth" aria-label="Choose month for spending wheel">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select></div><div class="card-body">${renderDonut(monthlyExpenseBreakdown, `${SHORT_MONTHS[state.dashboardMonth]} SPENT`)}</div></article>
       <section class="dashboard-grid equal">
         <article class="card"><div class="card-header"><div><h3>Income categories</h3><p>Where your income came from</p></div></div><div class="card-body">${renderBars(incomeBreakdown)}</div></article>
         <article class="card"><div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary">
@@ -810,6 +813,8 @@
     if (weeklyMonthSelect) weeklyMonthSelect.addEventListener("change", () => { state.month = number(weeklyMonthSelect.value); state.week = 0; render(); });
     const recurringBulkMonth = document.getElementById("recurringBulkMonth");
     if (recurringBulkMonth) recurringBulkMonth.addEventListener("change", () => { state.recurringMonth = number(recurringBulkMonth.value); render(); });
+    const dashboardSpendingMonth = document.getElementById("dashboardSpendingMonth");
+    if (dashboardSpendingMonth) dashboardSpendingMonth.addEventListener("change", () => { state.dashboardMonth = number(dashboardSpendingMonth.value); render(); });
 
     const settingsForm = document.getElementById("settingsForm");
     if (settingsForm) settingsForm.addEventListener("submit", event => {
