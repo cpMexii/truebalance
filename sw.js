@@ -1,4 +1,4 @@
-const CACHE = "truebalance-budget-v2";
+const CACHE = "truebalance-budget-v3";
 const FILES = ["./", "./index.html", "./styles.css", "./config.js", "./app.js", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {
