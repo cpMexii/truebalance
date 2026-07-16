@@ -52,7 +52,7 @@
     const year = new Date().getFullYear();
     return {
       version: 2,
-      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES) },
+      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {} },
       categories: {
         income: ["Paycheck", "Side income"],
         expense: ["Housing", "Utilities", "Groceries", "Transportation", "Insurance", "Dining", "Entertainment", "Personal", "Other"],
@@ -85,6 +85,7 @@
       };
     });
     if (!["small","standard","large","xlarge"].includes(data.settings.fontSize)) data.settings.fontSize = "standard";
+    if (!data.settings.boxSizes || typeof data.settings.boxSizes !== "object" || Array.isArray(data.settings.boxSizes)) data.settings.boxSizes = {};
     data.categories = { ...base.categories, ...(data.categories || {}) };
     for (const type of ["income", "expense", "debt", "savings"]) {
       if (!Array.isArray(data.categories[type])) data.categories[type] = [...base.categories[type]];
@@ -133,6 +134,7 @@
     recurringMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
     dashboardMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
     dashboardArrange: false
+    ,resizeBoxes: false
   };
 
   function saveData(showConfirmation = false, skipCloud = false) {
@@ -727,6 +729,23 @@
     toast("Tab order saved");
   }
 
+  function prepareResizableBoxes() {
+    app.classList.toggle("resize-boxes-mode", state.resizeBoxes);
+    const cards = [...app.querySelectorAll("article.card:not(.dashboard-widget)")];
+    cards.forEach((card, index) => {
+      const title = card.querySelector("h3")?.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `box-${index + 1}`;
+      const key = `${state.view}:${title}`;
+      const saved = data.settings.boxSizes[key] || { width: "standard", height: "normal" };
+      card.dataset.boxSizeKey = key;
+      card.classList.add(`global-width-${saved.width}`, `global-height-${saved.height}`);
+      if (!state.resizeBoxes) return;
+      card.insertAdjacentHTML("afterbegin", `<div class="global-box-tools"><span>Resize</span><label>Width<select data-global-box-size="${escapeHtml(key)}" data-dimension="width"><option value="standard">Standard</option><option value="half">Half</option><option value="wide">Wide</option><option value="full">Full</option></select></label><label>Height<select data-global-box-size="${escapeHtml(key)}" data-dimension="height"><option value="compact">Short</option><option value="normal">Normal</option><option value="tall">Tall</option></select></label><button class="ghost-button compact" type="button" data-reset-box-size="${escapeHtml(key)}">Reset</button></div>`);
+      card.querySelectorAll("[data-global-box-size]").forEach(select => { select.value = saved[select.dataset.dimension]; });
+    });
+    const toggle = document.getElementById("toggleResizeBoxes");
+    if (toggle) { toggle.textContent = state.resizeBoxes ? "Done resizing" : "Resize boxes"; toggle.classList.toggle("active", state.resizeBoxes); }
+  }
+
   function render() {
     document.body.dataset.fontSize = data.settings.fontSize;
     const renderers = {
@@ -739,6 +758,7 @@
       settings: renderSettings
     };
     app.innerHTML = renderers[state.view]();
+    prepareResizableBoxes();
     bindViewEvents();
   }
 
@@ -785,6 +805,21 @@
         toast("Box size saved");
       });
     });
+    app.querySelectorAll("[data-global-box-size]").forEach(select => select.addEventListener("change", () => {
+      const key = select.dataset.globalBoxSize;
+      const saved = data.settings.boxSizes[key] || { width: "standard", height: "normal" };
+      saved[select.dataset.dimension] = select.value;
+      data.settings.boxSizes[key] = saved;
+      saveData();
+      render();
+      toast("Box size saved");
+    }));
+    app.querySelectorAll("[data-reset-box-size]").forEach(button => button.addEventListener("click", () => {
+      delete data.settings.boxSizes[button.dataset.resetBoxSize];
+      saveData();
+      render();
+      toast("Box size reset");
+    }));
     if (state.dashboardArrange) bindDashboardDragging();
     app.querySelectorAll("[data-transaction-category]").forEach(select => select.addEventListener("change", () => {
       const monthIndex = number(select.dataset.month);
@@ -1208,6 +1243,11 @@
   bindNavigation();
   document.getElementById("quickAddTransaction").addEventListener("click", () => openTransactionModal(state.view === "monthly" ? state.month : undefined));
   document.getElementById("quickAddBill").addEventListener("click", () => openRecurringModal());
+  document.getElementById("toggleResizeBoxes").addEventListener("click", () => {
+    state.resizeBoxes = !state.resizeBoxes;
+    state.dashboardArrange = state.resizeBoxes;
+    render();
+  });
   document.getElementById("closeModal").addEventListener("click", closeModal);
   modalBackdrop.addEventListener("click", event => { if (event.target === modalBackdrop) closeModal(); });
   document.addEventListener("keydown", event => { if (event.key === "Escape" && !modalBackdrop.classList.contains("hidden")) closeModal(); });
