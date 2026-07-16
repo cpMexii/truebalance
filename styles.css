@@ -229,6 +229,27 @@ h3 { margin-bottom: 0; font-size: 14px; }
 .recurring-name { min-width: 180px; }
 .month-check-cell { text-align: center !important; min-width: 42px; }
 .recurring-kind { display: inline-flex; padding: 5px 8px; border-radius: 6px; background: var(--surface-3); color: var(--muted); font-size: 8px; text-transform: uppercase; }
+.zip-stats { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.zip-purchase-list { display: grid; gap: 14px; }
+.zip-purchase-card { overflow: hidden; }
+.zip-progress { display: flex; align-items: center; gap: 12px; margin-bottom: 17px; }
+.zip-progress > div { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.zip-progress > div span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--mint),var(--blue)); }
+.zip-progress small { color: var(--muted); font-size: 9px; white-space: nowrap; }
+.zip-installment-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.zip-installment { position: relative; min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 13px; border: 1px solid var(--border-soft); border-radius: 11px; background: rgba(255,255,255,.02); cursor: pointer; }
+.zip-installment input { width: 17px; height: 17px; accent-color: var(--mint); }
+.zip-installment span { min-width: 0; }
+.zip-installment strong, .zip-installment small { display: block; }
+.zip-installment strong { font-size: 10px; }
+.zip-installment small { margin-top: 4px; color: var(--faint); font-size: 8px; }
+.zip-installment b { font-size: 10px; }
+.zip-installment em { position: absolute; right: 8px; bottom: 5px; color: var(--blue); font-size: 7px; font-style: normal; font-weight: 800; text-transform: uppercase; }
+.zip-installment.paid { border-color: rgba(121,231,188,.25); background: rgba(121,231,188,.045); }
+.zip-installment.paid em { color: var(--mint); }
+.zip-installment.overdue { border-color: rgba(255,112,133,.3); background: rgba(255,112,133,.045); }
+.zip-installment.overdue em { color: var(--danger); }
+.calendar-event.zip { border-left-color: var(--blue); background: rgba(118,182,255,.12); color: #c8e1ff; }
 .transaction-category-select { min-width: 115px; max-width: 180px; height: 30px; border: 1px solid transparent; border-radius: 7px; background: var(--surface-3); color: #aebbd1; padding: 0 26px 0 8px; font-size: 8px; font-weight: 750; text-transform: uppercase; cursor: pointer; }
 .transaction-category-select:hover, .transaction-category-select:focus { outline: none; border-color: var(--mint); color: var(--text); }
 
@@ -317,6 +338,7 @@ body[data-font-size]:not([data-font-size="standard"]) .toast-region { zoom: var(
   .dashboard-widget.widget-wide, .dashboard-widget.widget-small, .dashboard-widget.widget-full, .dashboard-widget.widget-half { grid-column: 1 / -1; }
   .calendar-shell { grid-template-columns: 1fr; }
   .calendar-side { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .zip-installment-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
 @media (max-width: 900px) {
@@ -356,6 +378,8 @@ body[data-font-size]:not([data-font-size="standard"]) .toast-region { zoom: var(
   .form-grid { grid-template-columns: 1fr; }
   .field.span-2 { grid-column: auto; }
   .recurring-summary { grid-template-columns: 1fr; }
+  .zip-installment-grid { grid-template-columns: 1fr; }
+  .zip-progress { align-items: stretch; flex-direction: column; }
   .calendar-grid { grid-template-columns: repeat(7,minmax(58px,1fr)); overflow-x: auto; }
   .calendar-day { min-height: 90px; padding: 5px; }
   .calendar-event { font-size: 7px; padding: 4px; }
