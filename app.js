@@ -9,6 +9,7 @@
   const SHORT_MONTHS = MONTHS.map(month => month.slice(0, 3));
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
   const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","calendar","categories"];
+  const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","monthly-spending","income-categories","highlights"];
   const VIEW_META = {
     dashboard: ["OVERVIEW", "Dashboard"],
     monthly: ["PLAN & TRACK", "Monthly budget"],
@@ -44,7 +45,7 @@
     const year = new Date().getFullYear();
     return {
       version: 2,
-      settings: { year, currency: "USD", name: "My budget", tabOrder: [...DEFAULT_TAB_ORDER] },
+      settings: { year, currency: "USD", name: "My budget", tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER] },
       categories: {
         income: ["Paycheck", "Side income"],
         expense: ["Housing", "Utilities", "Groceries", "Transportation", "Insurance", "Dining", "Entertainment", "Personal", "Other"],
@@ -64,6 +65,9 @@
     const savedTabOrder = Array.isArray(data.settings.tabOrder) ? data.settings.tabOrder : [];
     data.settings.tabOrder = [...new Set(savedTabOrder.filter(tab => DEFAULT_TAB_ORDER.includes(tab)))];
     DEFAULT_TAB_ORDER.forEach(tab => { if (!data.settings.tabOrder.includes(tab)) data.settings.tabOrder.push(tab); });
+    const savedDashboardOrder = Array.isArray(data.settings.dashboardOrder) ? data.settings.dashboardOrder : [];
+    data.settings.dashboardOrder = [...new Set(savedDashboardOrder.filter(widget => DEFAULT_DASHBOARD_ORDER.includes(widget)))];
+    DEFAULT_DASHBOARD_ORDER.forEach(widget => { if (!data.settings.dashboardOrder.includes(widget)) data.settings.dashboardOrder.push(widget); });
     data.categories = { ...base.categories, ...(data.categories || {}) };
     for (const type of ["income", "expense", "debt", "savings"]) {
       if (!Array.isArray(data.categories[type])) data.categories[type] = [...base.categories[type]];
@@ -110,7 +114,8 @@
     transactionCategory: "all",
     calendarMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
     recurringMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
-    dashboardMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0
+    dashboardMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
+    dashboardArrange: false
   };
 
   function saveData(showConfirmation = false, skipCloud = false) {
@@ -403,8 +408,17 @@
     const expenseBreakdown = annualExpenseBreakdown();
     const monthlyExpenseBreakdown = expenseBreakdownForMonth(state.dashboardMonth);
     const incomeBreakdown = categoryAnnualTotals("income");
+    const widgetTools = id => state.dashboardArrange ? `<div class="dashboard-widget-tools"><span class="drag-grip" title="Drag to move">☰</span><button class="ghost-button compact" data-action="move-dashboard-up" data-widget="${id}" aria-label="Move box up">↑</button><button class="ghost-button compact" data-action="move-dashboard-down" data-widget="${id}" aria-label="Move box down">↓</button></div>` : "";
+    const widgetShell = (id, size, content) => `<article class="card dashboard-widget ${size} ${state.dashboardArrange ? "arranging" : ""}" data-dashboard-widget="${id}" draggable="${state.dashboardArrange}">${widgetTools(id)}${content}</article>`;
+    const widgets = {
+      "cashflow": widgetShell("cashflow", "widget-wide", `<div class="card-header"><div><h3>Cash flow by month</h3><p>Income compared with actual spending</p></div><span class="status-badge ${net >= 0 ? "paid" : "due"}">${net >= 0 ? "Positive" : "Negative"}</span></div><div class="card-body chart-wrap">${renderLineChart(monthIncome, monthExpenses)}</div>`),
+      "annual-spending": widgetShell("annual-spending", "widget-small", `<div class="card-header"><div><h3>Annual spending</h3><p>Actual expenses by category</p></div></div><div class="card-body">${renderDonut(expenseBreakdown)}</div>`),
+      "monthly-spending": widgetShell("monthly-spending", "widget-full monthly-spending-card", `<div class="card-header"><div><h3>Monthly spending</h3><p>Actual expenses by category for ${MONTHS[state.dashboardMonth]}</p></div><select id="dashboardSpendingMonth" aria-label="Choose month for spending wheel">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select></div><div class="card-body">${renderDonut(monthlyExpenseBreakdown, `${SHORT_MONTHS[state.dashboardMonth]} SPENT`)}</div>`),
+      "income-categories": widgetShell("income-categories", "widget-half", `<div class="card-header"><div><h3>Income categories</h3><p>Where your income came from</p></div></div><div class="card-body">${renderBars(incomeBreakdown)}</div>`),
+      "highlights": widgetShell("highlights", "widget-half", `<div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary"><div class="mini-summary"><label>Highest income month</label><strong>${monthIncome[highestIncomeIndex] ? MONTHS[highestIncomeIndex] : "—"}</strong></div><div class="mini-summary"><label>Highest expense month</label><strong>${monthExpenses[highestExpenseIndex] ? MONTHS[highestExpenseIndex] : "—"}</strong></div><div class="mini-summary"><label>Debt reduction</label><strong class="${annual.debtReduction >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(annual.debtReduction)}</strong></div></div></div>`)
+    };
     return `<div class="page-stack">
-      <div class="section-heading"><div><h2>${escapeHtml(data.settings.name)}</h2><p>Your ${data.settings.year} plan at a glance. Every figure updates as you enter monthly data.</p></div><div class="section-actions"><button class="ghost-button" data-action="print">Print dashboard</button><button class="secondary-button" data-view-jump="monthly">Open monthly planner</button></div></div>
+      <div class="section-heading"><div><h2>${escapeHtml(data.settings.name)}</h2><p>Your ${data.settings.year} plan at a glance. Every figure updates as you enter monthly data.</p></div><div class="section-actions"><button class="ghost-button" data-action="arrange-dashboard">${state.dashboardArrange ? "Done arranging" : "Rearrange boxes"}</button><button class="ghost-button" data-action="print">Print dashboard</button><button class="secondary-button" data-view-jump="monthly">Open monthly planner</button></div></div>
       <section class="stats-grid">
         ${statCard("Annual income", formatMoney(annual.income), `Average ${formatMoney(annual.income/12, true)} per month`, "var(--mint)")}
         ${statCard("Annual expenses", formatMoney(annual.expenses), `${annual.income ? Math.round(annual.expenses/annual.income*100) : 0}% of income`, "var(--violet)")}
@@ -412,19 +426,7 @@
         ${statCard("Net cash flow", formatMoney(net), net >= 0 ? "Income minus expenses" : "Expenses exceed income", net >= 0 ? "var(--gold)" : "var(--rose)", net >= 0 ? "delta-positive" : "delta-negative")}
         ${statCard("Current savings", formatMoney(annual.savings), `${annual.savingsIncrease >= 0 ? "+" : ""}${formatMoney(annual.savingsIncrease)} this year`, "var(--gold)", annual.savingsIncrease >= 0 ? "delta-positive" : "delta-negative")}
       </section>
-      <section class="dashboard-grid">
-        <article class="card"><div class="card-header"><div><h3>Cash flow by month</h3><p>Income compared with actual spending</p></div><span class="status-badge ${net >= 0 ? "paid" : "due"}">${net >= 0 ? "Positive" : "Negative"}</span></div><div class="card-body chart-wrap">${renderLineChart(monthIncome, monthExpenses)}</div></article>
-        <article class="card"><div class="card-header"><div><h3>Annual spending</h3><p>Actual expenses by category</p></div></div><div class="card-body">${renderDonut(expenseBreakdown)}</div></article>
-      </section>
-      <article class="card monthly-spending-card"><div class="card-header"><div><h3>Monthly spending</h3><p>Actual expenses by category for ${MONTHS[state.dashboardMonth]}</p></div><select id="dashboardSpendingMonth" aria-label="Choose month for spending wheel">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select></div><div class="card-body">${renderDonut(monthlyExpenseBreakdown, `${SHORT_MONTHS[state.dashboardMonth]} SPENT`)}</div></article>
-      <section class="dashboard-grid equal">
-        <article class="card"><div class="card-header"><div><h3>Income categories</h3><p>Where your income came from</p></div></div><div class="card-body">${renderBars(incomeBreakdown)}</div></article>
-        <article class="card"><div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary">
-          <div class="mini-summary"><label>Highest income month</label><strong>${monthIncome[highestIncomeIndex] ? MONTHS[highestIncomeIndex] : "—"}</strong></div>
-          <div class="mini-summary"><label>Highest expense month</label><strong>${monthExpenses[highestExpenseIndex] ? MONTHS[highestExpenseIndex] : "—"}</strong></div>
-          <div class="mini-summary"><label>Debt reduction</label><strong class="${annual.debtReduction >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(annual.debtReduction)}</strong></div>
-        </div></div></article>
-      </section>
+      <section class="dashboard-widgets">${data.settings.dashboardOrder.map(id => widgets[id]).join("")}</section>
     </div>`;
   }
 
@@ -752,6 +754,7 @@
     }));
 
     app.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => handleAction(button)));
+    if (state.dashboardArrange) bindDashboardDragging();
     app.querySelectorAll("[data-transaction-category]").forEach(select => select.addEventListener("change", () => {
       const monthIndex = number(select.dataset.month);
       const transaction = monthData(monthIndex).transactions.find(item => item.id === select.dataset.transactionCategory);
@@ -864,6 +867,41 @@
     if (action === "print") window.print();
     if (action === "check-all-recurring") setAllRecurring(true);
     if (action === "clear-all-recurring") setAllRecurring(false);
+    if (action === "arrange-dashboard") { state.dashboardArrange = !state.dashboardArrange; render(); }
+    if (action === "move-dashboard-up") moveDashboardWidget(button.dataset.widget, -1);
+    if (action === "move-dashboard-down") moveDashboardWidget(button.dataset.widget, 1);
+  }
+
+  function moveDashboardWidget(widget, offset) {
+    const current = data.settings.dashboardOrder.indexOf(widget);
+    const next = current + offset;
+    if (current < 0 || next < 0 || next >= data.settings.dashboardOrder.length) return;
+    [data.settings.dashboardOrder[current], data.settings.dashboardOrder[next]] = [data.settings.dashboardOrder[next], data.settings.dashboardOrder[current]];
+    saveData();
+    render();
+    toast("Dashboard order saved");
+  }
+
+  function bindDashboardDragging() {
+    let dragged = null;
+    app.querySelectorAll("[data-dashboard-widget]").forEach(widget => {
+      widget.addEventListener("dragstart", event => { dragged = widget.dataset.dashboardWidget; widget.classList.add("dragging"); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; });
+      widget.addEventListener("dragend", () => { widget.classList.remove("dragging"); dragged = null; });
+      widget.addEventListener("dragover", event => { event.preventDefault(); widget.classList.add("drag-over"); });
+      widget.addEventListener("dragleave", () => widget.classList.remove("drag-over"));
+      widget.addEventListener("drop", event => {
+        event.preventDefault();
+        widget.classList.remove("drag-over");
+        const target = widget.dataset.dashboardWidget;
+        if (!dragged || dragged === target) return;
+        const order = data.settings.dashboardOrder.filter(id => id !== dragged);
+        order.splice(order.indexOf(target), 0, dragged);
+        data.settings.dashboardOrder = order;
+        saveData();
+        render();
+        toast("Dashboard order saved");
+      });
+    });
   }
 
   function deleteTransaction(id, monthIndex) {
