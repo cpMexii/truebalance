@@ -14,6 +14,7 @@ You can also double-click `index.html` yourself.
 - Separate monthly planners for January through December
 - Custom income, expense, debt, and savings categories
 - Expense transaction log with month/category filters and CSV export
+- Editable category dropdown on every transaction for quick corrections
 - Bills and subscription tracker with a paid checkbox for every month
 - Check or clear every bill and subscription at once for a selected month
 - Automatic recurring-payment totals in monthly and annual expenses
