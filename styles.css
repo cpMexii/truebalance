@@ -126,6 +126,12 @@ h3 { margin-bottom: 0; font-size: 14px; }
 .donut-row i { width: 8px; height: 8px; border-radius: 2px; }
 .donut-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .donut-row strong { color: var(--text); font-size: 10px; }
+.monthly-spending-card .card-body { min-height: 310px; display: grid; align-items: center; }
+.monthly-spending-card .donut-layout { grid-template-columns: 210px minmax(0,1fr); gap: 34px; }
+.monthly-spending-card .donut { width: 190px; }
+.monthly-spending-card .donut::after { inset: 39px; }
+.monthly-spending-card .donut-center strong { font-size: 21px; }
+.monthly-spending-card .donut-legend { grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 28px; }
 .bar-list { display: grid; gap: 12px; }
 .bar-row { display: grid; grid-template-columns: 100px minmax(0,1fr) 76px; align-items: center; gap: 12px; font-size: 10px; }
 .bar-row > span { color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -300,6 +306,8 @@ body.modal-open { overflow: hidden; }
   .month-chip { min-width: 54px; }
   .notes-grid, .category-grid, .dashboard-grid.equal, .calendar-side { grid-template-columns: 1fr; }
   .donut-layout { grid-template-columns: 1fr; justify-items: center; }
+  .monthly-spending-card .donut-layout { grid-template-columns: 1fr; gap: 22px; }
+  .monthly-spending-card .donut-legend { grid-template-columns: 1fr; }
   .donut-legend { width: 100%; }
   .form-grid { grid-template-columns: 1fr; }
   .field.span-2 { grid-column: auto; }
