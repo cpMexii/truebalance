@@ -14,6 +14,7 @@ You can also double-click `index.html` yourself.
 - Monthly spending wheel on the Annual Dashboard with a month selector and category breakdown
 - Rearrangeable Dashboard boxes with desktop drag-and-drop and mobile Up/Down controls
 - Resizable Dashboard boxes with saved width and height controls
+- Saved width and height resizing for boxes throughout every app tab
 - Small, standard, large, and extra-large app font settings
 - Separate monthly planners for January through December
 - Custom income, expense, debt, and savings categories
