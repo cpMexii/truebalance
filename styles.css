@@ -153,12 +153,15 @@ h3 { margin-bottom: 0; font-size: 14px; }
 .data-table th, .data-table td { padding: 0 9px; }
 .data-table .numeric { text-align: right; font-variant-numeric: tabular-nums; }
 .data-table .total-row td { border-top: 1px solid var(--border); font-weight: 800; color: var(--text); }
-.data-table .actions { width: 42px; text-align: right; }
+.data-table .actions { width: 76px; text-align: right; }
+.row-actions { display: flex; justify-content: flex-end; gap: 3px; }
 .table-input { width: 100%; min-width: 90px; height: 31px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text); padding: 0 8px; text-align: right; }
 .table-input:hover, .table-input:focus { outline: none; border-color: var(--border); background: var(--surface-3); }
 .money-input { position: relative; }
 .delete-icon { width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--faint); cursor: pointer; }
 .delete-icon:hover { color: var(--danger); background: rgba(255,112,133,.08); }
+.edit-icon { width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--faint); cursor: pointer; }
+.edit-icon:hover { color: var(--mint); background: rgba(121,231,188,.08); }
 .status-badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 99px; padding: 5px 8px; font-size: 8px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
 .status-badge.paid { color: var(--mint); background: rgba(121,231,188,.1); }
 .status-badge.due { color: var(--gold); background: rgba(243,201,105,.1); }
