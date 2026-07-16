@@ -11,6 +11,7 @@ You can also double-click `index.html` yourself.
 ## Included features
 
 - Annual dashboard with income, expenses, planned budget, cash flow, savings, and debt summaries
+- Monthly spending wheel on the Annual Dashboard with a month selector and category breakdown
 - Separate monthly planners for January through December
 - Custom income, expense, debt, and savings categories
 - Expense transaction log with month/category filters and CSV export
