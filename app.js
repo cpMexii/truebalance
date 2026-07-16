@@ -553,7 +553,8 @@
     return `<table class="data-table"><thead><tr><th>Date</th><th>Category</th><th>Description</th><th class="numeric">Amount</th><th class="actions"></th></tr></thead><tbody>${transactions.map(item => {
       const monthIndex = item.month !== undefined ? number(item.month) : fallbackMonth;
       const date = monthIndex === null ? "—" : `${SHORT_MONTHS[monthIndex]} ${number(item.day)}`;
-      return `<tr><td>${date}</td><td><span class="recurring-kind">${escapeHtml(item.category)}</span></td><td>${escapeHtml(item.description || "—")}</td><td class="numeric">${escapeHtml(formatMoney(item.amount))}</td><td class="actions"><button class="delete-icon" title="Delete transaction" data-action="delete-transaction" data-id="${escapeHtml(item.id)}" data-month="${monthIndex}">×</button></td></tr>`;
+      const categoryOptions = [...new Set([item.category, ...data.categories.expense].filter(Boolean))];
+      return `<tr><td>${date}</td><td><select class="transaction-category-select" data-transaction-category="${escapeHtml(item.id)}" data-month="${monthIndex}" aria-label="Change category for ${escapeHtml(item.description || "transaction")}">${categoryOptions.map(category => `<option value="${escapeHtml(category)}" ${category === item.category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}</select></td><td>${escapeHtml(item.description || "—")}</td><td class="numeric">${escapeHtml(formatMoney(item.amount))}</td><td class="actions"><button class="delete-icon" title="Delete transaction" data-action="delete-transaction" data-id="${escapeHtml(item.id)}" data-month="${monthIndex}">×</button></td></tr>`;
     }).join("")}</tbody></table>`;
   }
 
@@ -748,6 +749,15 @@
     }));
 
     app.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => handleAction(button)));
+    app.querySelectorAll("[data-transaction-category]").forEach(select => select.addEventListener("change", () => {
+      const monthIndex = number(select.dataset.month);
+      const transaction = monthData(monthIndex).transactions.find(item => item.id === select.dataset.transactionCategory);
+      if (!transaction || !data.categories.expense.includes(select.value)) return;
+      transaction.category = select.value;
+      saveData();
+      render();
+      toast(`Category changed to ${select.value}`);
+    }));
     app.querySelectorAll("[data-recurring-check]").forEach(input => input.addEventListener("change", () => {
       const item = data.recurring.find(entry => entry.id === input.dataset.recurringCheck);
       if (!item) return;
