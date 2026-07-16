@@ -13,6 +13,8 @@ You can also double-click `index.html` yourself.
 - Annual dashboard with income, expenses, planned budget, cash flow, savings, and debt summaries
 - Monthly spending wheel on the Annual Dashboard with a month selector and category breakdown
 - Rearrangeable Dashboard boxes with desktop drag-and-drop and mobile Up/Down controls
+- Resizable Dashboard boxes with saved width and height controls
+- Small, standard, large, and extra-large app font settings
 - Separate monthly planners for January through December
 - Custom income, expense, debt, and savings categories
 - Expense transaction log with month/category filters and CSV export
