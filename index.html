@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1025">
+  <meta name="description" content="A private, offline annual and monthly budget planner.">
+  <title>TrueBalance Budget</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 40 40"><path d="M20 3l4.2 11.4L36 20l-11.8 5.4L20 37l-4.3-11.6L4 20l11.7-5.6L20 3z"/></svg>
+        </div>
+        <div><strong>TrueBalance</strong><span>Personal budget</span></div>
+      </div>
+
+      <nav class="main-nav" aria-label="Primary navigation">
+        <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Annual dashboard</span></button>
+        <button class="nav-item" data-view="monthly"><span class="nav-icon">▦</span><span>Monthly budget</span></button>
+        <button class="nav-item" data-view="transactions"><span class="nav-icon">↕</span><span>Transactions</span></button>
+        <button class="nav-item" data-view="recurring"><span class="nav-icon">↻</span><span>Bills & subscriptions</span></button>
+        <button class="nav-item" data-view="calendar"><span class="nav-icon">□</span><span>Calendar</span></button>
+        <button class="nav-item" data-view="categories"><span class="nav-icon">◫</span><span>Categories</span></button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>Settings & data</span></button>
+        <div class="privacy-note"><span class="status-dot"></span><div><strong>Saved locally</strong><small>Your budget stays in this browser.</small></div></div>
+      </div>
+    </aside>
+
+    <div class="mobile-scrim" id="mobileScrim"></div>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-button menu-button" id="menuButton" aria-label="Open menu">☰</button>
+          <div><p class="eyebrow" id="pageEyebrow">OVERVIEW</p><h1 id="pageTitle">Annual dashboard</h1></div>
+        </div>
+        <div class="topbar-actions">
+          <div class="year-pill"><span id="headerYear">2026</span><small>PLAN YEAR</small></div>
+          <button class="secondary-button compact" id="quickAddBill">+ Recurring</button>
+          <button class="primary-button compact" id="quickAddTransaction">+ Transaction</button>
+        </div>
+      </header>
+
+      <main id="app" tabindex="-1"></main>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden" id="modalBackdrop" role="presentation">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header"><div><p class="eyebrow" id="modalEyebrow">NEW ENTRY</p><h2 id="modalTitle">Add transaction</h2></div><button class="icon-button" id="closeModal" aria-label="Close">×</button></div>
+      <form id="modalForm" class="modal-form"></form>
+    </section>
+  </div>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <input type="file" id="importInput" accept="application/json,.json" hidden>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
