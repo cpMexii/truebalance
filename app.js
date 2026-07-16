@@ -10,6 +10,13 @@
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
   const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","calendar","categories"];
   const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","monthly-spending","income-categories","highlights"];
+  const DEFAULT_DASHBOARD_SIZES = {
+    "cashflow": { width: "wide", height: "normal" },
+    "annual-spending": { width: "small", height: "normal" },
+    "monthly-spending": { width: "full", height: "tall" },
+    "income-categories": { width: "half", height: "normal" },
+    "highlights": { width: "half", height: "normal" }
+  };
   const VIEW_META = {
     dashboard: ["OVERVIEW", "Dashboard"],
     monthly: ["PLAN & TRACK", "Monthly budget"],
@@ -45,7 +52,7 @@
     const year = new Date().getFullYear();
     return {
       version: 2,
-      settings: { year, currency: "USD", name: "My budget", tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER] },
+      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES) },
       categories: {
         income: ["Paycheck", "Side income"],
         expense: ["Housing", "Utilities", "Groceries", "Transportation", "Insurance", "Dining", "Entertainment", "Personal", "Other"],
@@ -68,6 +75,16 @@
     const savedDashboardOrder = Array.isArray(data.settings.dashboardOrder) ? data.settings.dashboardOrder : [];
     data.settings.dashboardOrder = [...new Set(savedDashboardOrder.filter(widget => DEFAULT_DASHBOARD_ORDER.includes(widget)))];
     DEFAULT_DASHBOARD_ORDER.forEach(widget => { if (!data.settings.dashboardOrder.includes(widget)) data.settings.dashboardOrder.push(widget); });
+    const savedSizes = data.settings.dashboardSizes && typeof data.settings.dashboardSizes === "object" ? data.settings.dashboardSizes : {};
+    data.settings.dashboardSizes = {};
+    DEFAULT_DASHBOARD_ORDER.forEach(widget => {
+      const candidate = savedSizes[widget] || {};
+      data.settings.dashboardSizes[widget] = {
+        width: ["small","half","wide","full"].includes(candidate.width) ? candidate.width : DEFAULT_DASHBOARD_SIZES[widget].width,
+        height: ["compact","normal","tall"].includes(candidate.height) ? candidate.height : DEFAULT_DASHBOARD_SIZES[widget].height
+      };
+    });
+    if (!["small","standard","large","xlarge"].includes(data.settings.fontSize)) data.settings.fontSize = "standard";
     data.categories = { ...base.categories, ...(data.categories || {}) };
     for (const type of ["income", "expense", "debt", "savings"]) {
       if (!Array.isArray(data.categories[type])) data.categories[type] = [...base.categories[type]];
@@ -408,14 +425,17 @@
     const expenseBreakdown = annualExpenseBreakdown();
     const monthlyExpenseBreakdown = expenseBreakdownForMonth(state.dashboardMonth);
     const incomeBreakdown = categoryAnnualTotals("income");
-    const widgetTools = id => state.dashboardArrange ? `<div class="dashboard-widget-tools"><span class="drag-grip" title="Drag to move">☰</span><button class="ghost-button compact" data-action="move-dashboard-up" data-widget="${id}" aria-label="Move box up">↑</button><button class="ghost-button compact" data-action="move-dashboard-down" data-widget="${id}" aria-label="Move box down">↓</button></div>` : "";
-    const widgetShell = (id, size, content) => `<article class="card dashboard-widget ${size} ${state.dashboardArrange ? "arranging" : ""}" data-dashboard-widget="${id}" draggable="${state.dashboardArrange}">${widgetTools(id)}${content}</article>`;
+    const widgetTools = id => state.dashboardArrange ? `<div class="dashboard-widget-tools"><span class="drag-grip" title="Drag to move">☰</span><label>Width<select data-dashboard-size="${id}" data-dimension="width" aria-label="Box width"><option value="small">Small</option><option value="half">Half</option><option value="wide">Wide</option><option value="full">Full</option></select></label><label>Height<select data-dashboard-size="${id}" data-dimension="height" aria-label="Box height"><option value="compact">Short</option><option value="normal">Normal</option><option value="tall">Tall</option></select></label><button class="ghost-button compact" data-action="move-dashboard-up" data-widget="${id}" aria-label="Move box up">↑</button><button class="ghost-button compact" data-action="move-dashboard-down" data-widget="${id}" aria-label="Move box down">↓</button></div>` : "";
+    const widgetShell = (id, content) => {
+      const size = data.settings.dashboardSizes[id];
+      return `<article class="card dashboard-widget widget-${size.width} height-${size.height} ${state.dashboardArrange ? "arranging" : ""}" data-dashboard-widget="${id}" draggable="${state.dashboardArrange}">${widgetTools(id)}${content}</article>`;
+    };
     const widgets = {
-      "cashflow": widgetShell("cashflow", "widget-wide", `<div class="card-header"><div><h3>Cash flow by month</h3><p>Income compared with actual spending</p></div><span class="status-badge ${net >= 0 ? "paid" : "due"}">${net >= 0 ? "Positive" : "Negative"}</span></div><div class="card-body chart-wrap">${renderLineChart(monthIncome, monthExpenses)}</div>`),
-      "annual-spending": widgetShell("annual-spending", "widget-small", `<div class="card-header"><div><h3>Annual spending</h3><p>Actual expenses by category</p></div></div><div class="card-body">${renderDonut(expenseBreakdown)}</div>`),
-      "monthly-spending": widgetShell("monthly-spending", "widget-full monthly-spending-card", `<div class="card-header"><div><h3>Monthly spending</h3><p>Actual expenses by category for ${MONTHS[state.dashboardMonth]}</p></div><select id="dashboardSpendingMonth" aria-label="Choose month for spending wheel">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select></div><div class="card-body">${renderDonut(monthlyExpenseBreakdown, `${SHORT_MONTHS[state.dashboardMonth]} SPENT`)}</div>`),
-      "income-categories": widgetShell("income-categories", "widget-half", `<div class="card-header"><div><h3>Income categories</h3><p>Where your income came from</p></div></div><div class="card-body">${renderBars(incomeBreakdown)}</div>`),
-      "highlights": widgetShell("highlights", "widget-half", `<div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary"><div class="mini-summary"><label>Highest income month</label><strong>${monthIncome[highestIncomeIndex] ? MONTHS[highestIncomeIndex] : "—"}</strong></div><div class="mini-summary"><label>Highest expense month</label><strong>${monthExpenses[highestExpenseIndex] ? MONTHS[highestExpenseIndex] : "—"}</strong></div><div class="mini-summary"><label>Debt reduction</label><strong class="${annual.debtReduction >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(annual.debtReduction)}</strong></div></div></div>`)
+      "cashflow": widgetShell("cashflow", `<div class="card-header"><div><h3>Cash flow by month</h3><p>Income compared with actual spending</p></div><span class="status-badge ${net >= 0 ? "paid" : "due"}">${net >= 0 ? "Positive" : "Negative"}</span></div><div class="card-body chart-wrap">${renderLineChart(monthIncome, monthExpenses)}</div>`),
+      "annual-spending": widgetShell("annual-spending", `<div class="card-header"><div><h3>Annual spending</h3><p>Actual expenses by category</p></div></div><div class="card-body">${renderDonut(expenseBreakdown)}</div>`),
+      "monthly-spending": widgetShell("monthly-spending", `<div class="card-header"><div><h3>Monthly spending</h3><p>Actual expenses by category for ${MONTHS[state.dashboardMonth]}</p></div><select id="dashboardSpendingMonth" aria-label="Choose month for spending wheel">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select></div><div class="card-body">${renderDonut(monthlyExpenseBreakdown, `${SHORT_MONTHS[state.dashboardMonth]} SPENT`)}</div>`),
+      "income-categories": widgetShell("income-categories", `<div class="card-header"><div><h3>Income categories</h3><p>Where your income came from</p></div></div><div class="card-body">${renderBars(incomeBreakdown)}</div>`),
+      "highlights": widgetShell("highlights", `<div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary"><div class="mini-summary"><label>Highest income month</label><strong>${monthIncome[highestIncomeIndex] ? MONTHS[highestIncomeIndex] : "—"}</strong></div><div class="mini-summary"><label>Highest expense month</label><strong>${monthExpenses[highestExpenseIndex] ? MONTHS[highestExpenseIndex] : "—"}</strong></div><div class="mini-summary"><label>Debt reduction</label><strong class="${annual.debtReduction >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(annual.debtReduction)}</strong></div></div></div>`)
     };
     return `<div class="page-stack">
       <div class="section-heading"><div><h2>${escapeHtml(data.settings.name)}</h2><p>Your ${data.settings.year} plan at a glance. Every figure updates as you enter monthly data.</p></div><div class="section-actions"><button class="ghost-button" data-action="arrange-dashboard">${state.dashboardArrange ? "Done arranging" : "Rearrange boxes"}</button><button class="ghost-button" data-action="print">Print dashboard</button><button class="secondary-button" data-view-jump="monthly">Open monthly planner</button></div></div>
@@ -663,7 +683,7 @@
     return `<div class="page-stack">
       <div class="section-heading"><div><h2>Planner settings</h2><p>Choose your year and currency, then back up or move your budget whenever you want.</p></div></div>
       <section class="settings-grid">
-        <article class="card"><div class="card-header"><div><h3>General</h3><p>Used across the entire planner</p></div></div><form class="card-body form-grid" id="settingsForm"><div class="field span-2"><label for="budgetName">Budget name</label><input id="budgetName" name="name" value="${escapeHtml(data.settings.name)}" maxlength="60"></div><div class="field"><label for="planYear">Plan year</label><input id="planYear" name="year" type="number" min="2000" max="2100" value="${number(data.settings.year)}"></div><div class="field"><label for="currencySelect">Currency</label><select id="currencySelect" name="currency">${["USD","CAD","EUR","GBP","AUD","MXN","JPY","INR"].map(code => `<option ${data.settings.currency===code ? "selected" : ""}>${code}</option>`).join("")}</select></div><div class="field span-2"><button class="primary-button">Save settings</button></div></form></article>
+        <article class="card"><div class="card-header"><div><h3>General</h3><p>Used across the entire planner</p></div></div><form class="card-body form-grid" id="settingsForm"><div class="field span-2"><label for="budgetName">Budget name</label><input id="budgetName" name="name" value="${escapeHtml(data.settings.name)}" maxlength="60"></div><div class="field"><label for="planYear">Plan year</label><input id="planYear" name="year" type="number" min="2000" max="2100" value="${number(data.settings.year)}"></div><div class="field"><label for="currencySelect">Currency</label><select id="currencySelect" name="currency">${["USD","CAD","EUR","GBP","AUD","MXN","JPY","INR"].map(code => `<option ${data.settings.currency===code ? "selected" : ""}>${code}</option>`).join("")}</select></div><div class="field span-2"><label for="fontSizeSelect">App font size</label><select id="fontSizeSelect" name="fontSize">${[["small","Small"],["standard","Standard"],["large","Large"],["xlarge","Extra large"]].map(([value,label]) => `<option value="${value}" ${data.settings.fontSize===value ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field span-2"><button class="primary-button">Save settings</button></div></form></article>
         <article class="card"><div class="card-header"><div><h3>Backup & restore</h3><p>Keep a portable copy of your planner</p></div></div><div class="card-body page-stack" style="gap:14px"><div class="info-callout">TrueBalance always keeps a local device copy. Export a backup before clearing browser data or replacing a device.</div><div class="settings-actions"><button class="secondary-button" data-action="export-json">Export backup</button><button class="ghost-button" data-action="import-json">Import backup</button><button class="ghost-button" data-action="export-csv">Export transactions CSV</button></div></div></article>
         <article class="card cloud-card"><div class="card-header"><div><h3>Cloud sync</h3><p>Use the same budget on all your devices</p></div><span class="status-badge ${cloudSession ? "paid" : "due"}">${cloudSession ? "Connected" : "Not connected"}</span></div><div class="card-body">${!cloudReady ? `<div class="info-callout">Cloud sync is ready to connect, but your Supabase project details still need to be added to <strong>config.js</strong>. Follow SUPABASE-SETUP.md.</div>` : cloudSession ? `<div class="cloud-account"><div><span>Signed in as</span><strong>${escapeHtml(cloudEmail)}</strong></div><div class="settings-actions"><button class="secondary-button" data-action="sync-cloud">Sync now</button><button class="ghost-button" data-action="download-cloud">Download cloud copy</button><button class="ghost-button" data-action="sign-out-cloud">Sign out</button></div></div>` : `<form id="cloudAuthForm" class="form-grid"><div class="field span-2"><label for="cloudEmail">Email</label><input id="cloudEmail" name="email" type="email" autocomplete="email" required></div><div class="field span-2"><label for="cloudPassword">Password</label><input id="cloudPassword" name="password" type="password" minlength="6" autocomplete="current-password" required></div><div class="field span-2 settings-actions"><button class="primary-button" name="mode" value="signin">Sign in</button><button class="secondary-button" name="mode" value="signup">Create account</button></div></form>`}</div></article>
         <article class="card"><div class="card-header"><div><h3>Tab order</h3><p>Arrange the sidebar to fit your routine</p></div></div><div class="card-body"><div class="tab-order-list">${data.settings.tabOrder.map((tab,index) => `<div class="tab-order-row"><span class="tab-order-grip" aria-hidden="true">☰</span><span>${escapeHtml(VIEW_META[tab][1])}</span><div class="tab-order-actions"><button class="ghost-button compact" data-action="move-tab-up" data-tab="${tab}" ${index === 0 ? "disabled" : ""} aria-label="Move ${escapeHtml(VIEW_META[tab][1])} up">↑</button><button class="ghost-button compact" data-action="move-tab-down" data-tab="${tab}" ${index === data.settings.tabOrder.length-1 ? "disabled" : ""} aria-label="Move ${escapeHtml(VIEW_META[tab][1])} down">↓</button></div></div>`).join("")}</div><p class="settings-hint">On a computer, you can also drag tabs directly in the sidebar. Your order saves automatically.</p></div></article>
@@ -708,6 +728,7 @@
   }
 
   function render() {
+    document.body.dataset.fontSize = data.settings.fontSize;
     const renderers = {
       dashboard: renderDashboard,
       monthly: renderMonthly,
@@ -754,6 +775,16 @@
     }));
 
     app.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", () => handleAction(button)));
+    app.querySelectorAll("[data-dashboard-size]").forEach(select => {
+      const size = data.settings.dashboardSizes[select.dataset.dashboardSize];
+      select.value = size[select.dataset.dimension];
+      select.addEventListener("change", () => {
+        size[select.dataset.dimension] = select.value;
+        saveData();
+        render();
+        toast("Box size saved");
+      });
+    });
     if (state.dashboardArrange) bindDashboardDragging();
     app.querySelectorAll("[data-transaction-category]").forEach(select => select.addEventListener("change", () => {
       const monthIndex = number(select.dataset.month);
@@ -826,6 +857,7 @@
       data.settings.name = String(form.get("name") || "My budget").trim() || "My budget";
       data.settings.year = Math.min(2100, Math.max(2000, number(form.get("year"))));
       data.settings.currency = String(form.get("currency") || "USD");
+      data.settings.fontSize = String(form.get("fontSize") || "standard");
       saveData();
       headerYear.textContent = data.settings.year;
       render();
@@ -885,7 +917,12 @@
   function bindDashboardDragging() {
     let dragged = null;
     app.querySelectorAll("[data-dashboard-widget]").forEach(widget => {
-      widget.addEventListener("dragstart", event => { dragged = widget.dataset.dashboardWidget; widget.classList.add("dragging"); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; });
+      widget.addEventListener("dragstart", event => {
+        if (event.target.closest("button,select,label")) { event.preventDefault(); return; }
+        dragged = widget.dataset.dashboardWidget;
+        widget.classList.add("dragging");
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      });
       widget.addEventListener("dragend", () => { widget.classList.remove("dragging"); dragged = null; });
       widget.addEventListener("dragover", event => { event.preventDefault(); widget.classList.add("drag-over"); });
       widget.addEventListener("dragleave", () => widget.classList.remove("drag-over"));
