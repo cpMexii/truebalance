@@ -8,7 +8,7 @@
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const SHORT_MONTHS = MONTHS.map(month => month.slice(0, 3));
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
-  const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","calendar","categories"];
+  const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","zip","calendar","categories"];
   const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","monthly-spending","income-categories","highlights"];
   const DEFAULT_DASHBOARD_SIZES = {
     "cashflow": { width: "wide", height: "normal" },
@@ -22,6 +22,7 @@
     monthly: ["PLAN & TRACK", "Monthly budget"],
     transactions: ["ACTIVITY", "Transactions"],
     recurring: ["RECURRING PAYMENTS", "Bills & subscriptions"],
+    zip: ["BUY NOW, PAY LATER", "ZIP payments"],
     calendar: ["PAYMENT DATES", "Calendar"],
     categories: ["CUSTOMIZE", "Categories"],
     settings: ["PREFERENCES", "Settings & data"]
@@ -60,7 +61,8 @@
         savings: ["Emergency fund", "Vacation"]
       },
       monthly: Array.from({ length: 12 }, freshMonth),
-      recurring: []
+      recurring: [],
+      zipPurchases: []
     };
   }
 
@@ -109,6 +111,11 @@
     });
     data.recurring = Array.isArray(data.recurring) ? data.recurring : [];
     data.recurring.forEach(item => { item.paid = item.paid || {}; });
+    data.zipPurchases = Array.isArray(data.zipPurchases) ? data.zipPurchases : [];
+    data.zipPurchases.forEach(purchase => {
+      purchase.payments = Array.isArray(purchase.payments) ? purchase.payments : [];
+      purchase.payments.forEach(payment => { payment.paid = Boolean(payment.paid); });
+    });
     return data;
   }
 
@@ -271,6 +278,19 @@
       .reduce((sum, item) => sum + number(item.amount), 0);
   }
 
+  function zipPaymentsForMonth(index, paidOnly = false) {
+    const year = number(data.settings.year);
+    return data.zipPurchases.flatMap(purchase => purchase.payments.map(payment => ({ ...payment, purchase })))
+      .filter(entry => {
+        const due = new Date(`${entry.dueDate}T12:00:00`);
+        return due.getFullYear() === year && due.getMonth() === index && (!paidOnly || entry.paid);
+      });
+  }
+
+  function zipPaidForMonth(index) {
+    return zipPaymentsForMonth(index, true).reduce((sum, entry) => sum + number(entry.amount), 0);
+  }
+
   function transactionTotal(index, category) {
     return monthData(index).transactions
       .filter(item => !category || item.category === category)
@@ -293,14 +313,16 @@
     const bills = recurringPaidForMonth(index, "bill");
     const subscriptions = recurringPaidForMonth(index, "subscription");
     const transactions = transactionTotal(index);
+    const zip = zipPaidForMonth(index);
     return {
       income,
-      expenses: transactions + bills + subscriptions,
+      expenses: transactions + bills + subscriptions + zip,
       budget: sumMap(month.budgets) + weeklyBudgetTotal(index),
       debt: sumMap(month.debt),
       savings: sumMap(month.savings),
       bills,
       subscriptions,
+      zip,
       transactions
     };
   }
@@ -332,6 +354,7 @@
     const items = data.categories.expense.map(category => ({ name: category, value: transactionTotal(index, category) }));
     items.push({ name: "Bills", value: recurringPaidForMonth(index, "bill") });
     items.push({ name: "Subscriptions", value: recurringPaidForMonth(index, "subscription") });
+    items.push({ name: "ZIP payments", value: zipPaidForMonth(index) });
     return items.filter(item => item.value > 0).sort((a, b) => b.value - a.value);
   }
 
@@ -343,6 +366,8 @@
       const subscriptions = recurringPaidForMonth(index, "subscription");
       if (bills) totals.set("Bills", (totals.get("Bills") || 0) + bills);
       if (subscriptions) totals.set("Subscriptions", (totals.get("Subscriptions") || 0) + subscriptions);
+      const zip = zipPaidForMonth(index);
+      if (zip) totals.set("ZIP payments", (totals.get("ZIP payments") || 0) + zip);
     });
     return [...totals.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }
@@ -457,10 +482,10 @@
     const categories = data.categories[type];
     const mapName = type === "expense" ? "budgets" : type;
     if (type === "expense") {
-      const rows = [...categories, "Bills", "Subscriptions"];
+      const rows = [...categories, "Bills", "Subscriptions", "ZIP payments"];
       return rows.map(category => {
         const key = category.toUpperCase();
-        const spent = key === "BILLS" ? recurringPaidForMonth(monthIndex, "bill") : key === "SUBSCRIPTIONS" ? recurringPaidForMonth(monthIndex, "subscription") : transactionTotal(monthIndex, category);
+        const spent = key === "BILLS" ? recurringPaidForMonth(monthIndex, "bill") : key === "SUBSCRIPTIONS" ? recurringPaidForMonth(monthIndex, "subscription") : key === "ZIP PAYMENTS" ? zipPaidForMonth(monthIndex) : transactionTotal(monthIndex, category);
         return `<tr><td>${escapeHtml(category)}</td><td class="numeric"><input class="table-input" type="number" min="0" step="0.01" value="${number(month.budgets[category]) || ""}" placeholder="0" data-month-map="budgets" data-category="${escapeHtml(category)}"></td><td class="numeric">${escapeHtml(formatMoney(spent))}</td></tr>`;
       }).join("") + (weeklyBudgetTotal(monthIndex) ? `<tr><td>Weekly plans</td><td class="numeric">${escapeHtml(formatMoney(weeklyBudgetTotal(monthIndex)))}</td><td class="numeric">Included above</td></tr>` : "") + `<tr class="total-row"><td>Total</td><td class="numeric">${escapeHtml(formatMoney(monthTotals(monthIndex).budget))}</td><td class="numeric">${escapeHtml(formatMoney(monthTotals(monthIndex).expenses))}</td></tr>`;
     }
@@ -479,7 +504,7 @@
       ${monthStrip(index)}
       <section class="stats-grid">
         ${statCard("Total income", formatMoney(totals.income), MONTHS[index], "var(--mint)")}
-        ${statCard("Total expenses", formatMoney(totals.expenses), "Transactions + paid recurring", "var(--violet)")}
+        ${statCard("Total expenses", formatMoney(totals.expenses), "Transactions + paid recurring + ZIP", "var(--violet)")}
         ${statCard("Planned budget", formatMoney(totals.budget), `${formatMoney(Math.max(0, totals.budget - totals.expenses))} unspent`, "var(--blue)")}
         ${statCard("Debt balance", formatMoney(totals.debt), "Current amount", "var(--rose)")}
         ${statCard("Money remaining", formatMoney(remaining), "Income minus expenses", "var(--gold)", remaining >= 0 ? "delta-positive" : "delta-negative")}
@@ -512,15 +537,24 @@
     return data.recurring.filter(item => number(item.dueDay) >= range.start && number(item.dueDay) <= range.end && (!paidOnly || item.paid && item.paid[monthIndex]));
   }
 
+  function weeklyZip(monthIndex, weekIndex, paidOnly = false) {
+    const range = weekRange(monthIndex, weekIndex);
+    return zipPaymentsForMonth(monthIndex, paidOnly).filter(entry => {
+      const day = new Date(`${entry.dueDate}T12:00:00`).getDate();
+      return day >= range.start && day <= range.end;
+    });
+  }
+
   function weeklyTotals(monthIndex, weekIndex) {
     const month = monthData(monthIndex);
     const range = weekRange(monthIndex, weekIndex);
     const income = month.incomeEntries.filter(item => number(item.day) >= range.start && number(item.day) <= range.end).reduce((sum,item) => sum + number(item.amount),0);
     const transactions = month.transactions.filter(item => number(item.day) >= range.start && number(item.day) <= range.end).reduce((sum,item) => sum + number(item.amount),0);
     const recurringPaid = weeklyRecurring(monthIndex, weekIndex, true).reduce((sum,item) => sum + number(item.amount),0);
-    const billsDue = weeklyRecurring(monthIndex, weekIndex).reduce((sum,item) => sum + number(item.amount),0);
+    const zipPaid = weeklyZip(monthIndex, weekIndex, true).reduce((sum,item) => sum + number(item.amount),0);
+    const billsDue = weeklyRecurring(monthIndex, weekIndex).reduce((sum,item) => sum + number(item.amount),0) + weeklyZip(monthIndex, weekIndex).reduce((sum,item) => sum + number(item.amount),0);
     const budget = sumMap(month.weeklyBudgets[weekIndex]);
-    return { income, expenses: transactions + recurringPaid, billsDue, budget, remaining: income - transactions - recurringPaid };
+    return { income, expenses: transactions + recurringPaid + zipPaid, billsDue, budget, remaining: income - transactions - recurringPaid - zipPaid };
   }
 
   function weeklyCategorySpent(monthIndex, weekIndex, category) {
@@ -529,6 +563,7 @@
       const kind = category === "Bills" ? "bill" : "subscription";
       return weeklyRecurring(monthIndex, weekIndex, true).filter(item => item.kind === kind).reduce((sum,item) => sum + number(item.amount),0);
     }
+    if (category === "ZIP payments") return weeklyZip(monthIndex, weekIndex, true).reduce((sum,item) => sum + number(item.amount),0);
     return monthData(monthIndex).transactions.filter(item => item.category === category && number(item.day) >= range.start && number(item.day) <= range.end).reduce((sum,item) => sum + number(item.amount),0);
   }
 
@@ -538,7 +573,8 @@
     const income = month.incomeEntries.filter(item => number(item.day) >= range.start && number(item.day) <= range.end).map(item => ({ ...item, entryType: "income" }));
     const expenses = month.transactions.filter(item => number(item.day) >= range.start && number(item.day) <= range.end).map(item => ({ ...item, entryType: "expense" }));
     const recurring = weeklyRecurring(monthIndex, weekIndex, true).map(item => ({ id: item.id, day: item.dueDay, category: titleCase(item.kind), description: item.name, amount: item.amount, entryType: "recurring" }));
-    return [...income, ...expenses, ...recurring].sort((a,b) => number(b.day) - number(a.day));
+    const zip = weeklyZip(monthIndex, weekIndex, true).map(item => ({ id: item.id, day: new Date(`${item.dueDate}T12:00:00`).getDate(), category: "ZIP", description: item.purchase.name, amount: item.amount, entryType: "zip" }));
+    return [...income, ...expenses, ...recurring, ...zip].sort((a,b) => number(b.day) - number(a.day));
   }
 
   function renderWeeklyActivity(items, monthIndex) {
@@ -552,7 +588,7 @@
     const range = weekRange(monthIndex, weekIndex);
     const totals = weeklyTotals(monthIndex, weekIndex);
     const month = monthData(monthIndex);
-    const categories = [...data.categories.expense, "Bills", "Subscriptions"];
+    const categories = [...data.categories.expense, "Bills", "Subscriptions", "ZIP payments"];
     const monthSummary = monthTotals(monthIndex);
     const weekTabs = Array.from({ length: 5 }, (_, index) => { const dates = weekRange(monthIndex,index); return `<button class="month-chip ${weekIndex===index ? "active" : ""}" data-select-week="${index}">Week ${index+1} · ${SHORT_MONTHS[monthIndex]} ${dates.start}–${dates.end}</button>`; }).join("");
     const budgetRows = categories.map(category => { const budget = number(month.weeklyBudgets[weekIndex][category]); const spent = weeklyCategorySpent(monthIndex,weekIndex,category); return `<tr><td>${escapeHtml(category)}</td><td class="numeric"><input class="table-input" type="number" min="0" step="0.01" value="${budget || ""}" placeholder="0" data-week-budget="${escapeHtml(category)}"></td><td class="numeric">${formatMoney(spent)}</td><td class="numeric ${budget-spent >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(budget-spent)}</td></tr>`; }).join("");
@@ -629,6 +665,30 @@
     </div>`;
   }
 
+  function zipPaymentStatus(payment) {
+    if (payment.paid) return "paid";
+    return new Date(`${payment.dueDate}T23:59:59`) < new Date() ? "overdue" : "upcoming";
+  }
+
+  function renderZipPurchase(purchase) {
+    const paid = purchase.payments.filter(payment => payment.paid).reduce((sum,payment) => sum + number(payment.amount),0);
+    const remaining = Math.max(0, number(purchase.total) - paid);
+    return `<article class="card zip-purchase-card"><div class="card-header"><div><h3>${escapeHtml(purchase.name)}</h3><p>${escapeHtml(purchase.store || "ZIP purchase")} · ${purchase.payments.length} installments</p></div><div class="section-actions"><span class="status-badge ${remaining ? "due" : "paid"}">${remaining ? `${formatMoney(remaining)} left` : "Paid off"}</span><button class="delete-icon" data-action="delete-zip" data-id="${escapeHtml(purchase.id)}" aria-label="Delete ZIP purchase">×</button></div></div><div class="card-body"><div class="zip-progress"><div><span style="width:${number(purchase.total) ? Math.min(100, paid / number(purchase.total) * 100) : 0}%"></span></div><small>${formatMoney(paid)} of ${formatMoney(purchase.total)} paid</small></div><div class="zip-installment-grid">${purchase.payments.map((payment,index) => {
+      const status = zipPaymentStatus(payment);
+      const due = new Date(`${payment.dueDate}T12:00:00`);
+      return `<label class="zip-installment ${status}"><input type="checkbox" data-zip-payment="${escapeHtml(purchase.id)}" data-payment-index="${index}" ${payment.paid ? "checked" : ""}><span><strong>Payment ${index+1}</strong><small>${due.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</small></span><b>${formatMoney(payment.amount)}</b><em>${status}</em></label>`;
+    }).join("")}</div></div></article>`;
+  }
+
+  function renderZip() {
+    const payments = data.zipPurchases.flatMap(purchase => purchase.payments.map(payment => ({...payment,purchase})));
+    const outstanding = payments.filter(payment => !payment.paid).reduce((sum,payment) => sum + number(payment.amount),0);
+    const paidYear = MONTHS.reduce((sum,_,index) => sum + zipPaidForMonth(index),0);
+    const next = payments.filter(payment => !payment.paid).sort((a,b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0];
+    const overdue = payments.filter(payment => zipPaymentStatus(payment) === "overdue").length;
+    return `<div class="page-stack"><div class="section-heading"><div><h2>ZIP payment tracker</h2><p>Track every installment. Checked payments automatically count toward monthly and annual spending.</p></div><button class="primary-button" data-action="add-zip">+ Add ZIP purchase</button></div><section class="stats-grid zip-stats">${statCard("Outstanding",formatMoney(outstanding),`${payments.filter(payment=>!payment.paid).length} payments remaining`,"var(--violet)")}${statCard("Paid this year",formatMoney(paidYear),"Included in spending totals","var(--mint)")}${statCard("Next payment",next ? formatMoney(next.amount) : formatMoney(0),next ? new Date(`${next.dueDate}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "Nothing due","var(--blue)")}${statCard("Overdue",String(overdue),overdue ? "Needs attention" : "All caught up","var(--rose)")}</section>${data.zipPurchases.length ? `<section class="zip-purchase-list">${data.zipPurchases.map(renderZipPurchase).join("")}</section>` : `<article class="card"><div class="empty-state"><div><strong>No ZIP purchases yet</strong><p>Add a purchase and TrueBalance will calculate the installment dates and amounts for you.</p><button class="primary-button" data-action="add-zip">Add first ZIP purchase</button></div></div></article>`}</div>`;
+  }
+
   function calendarCells(monthIndex) {
     const year = number(data.settings.year);
     const firstDay = new Date(year, monthIndex, 1).getDay();
@@ -640,26 +700,30 @@
       const outside = raw < 1 || raw > days;
       const day = raw < 1 ? previousDays + raw : raw > days ? raw - days : raw;
       const isToday = !outside && year === today.getFullYear() && monthIndex === today.getMonth() && day === today.getDate();
-      const events = outside ? [] : data.recurring.filter(item => number(item.dueDay) === day);
-      cells.push(`<div class="calendar-day ${outside ? "outside" : ""} ${isToday ? "today" : ""}"><span class="day-number">${day}</span>${events.slice(0,3).map(item => `<div class="calendar-event ${item.kind} ${item.paid && item.paid[monthIndex] ? "paid" : ""}" title="${escapeHtml(item.name)} · ${escapeHtml(formatMoney(item.amount))}">${escapeHtml(item.name)}</div>`).join("")}${events.length > 3 ? `<div class="calendar-event">+${events.length-3} more</div>` : ""}</div>`);
+      const recurringEvents = outside ? [] : data.recurring.filter(item => number(item.dueDay) === day).map(item => ({ name:item.name, amount:item.amount, kind:item.kind, paid:Boolean(item.paid && item.paid[monthIndex]) }));
+      const zipEvents = outside ? [] : zipPaymentsForMonth(monthIndex).filter(item => new Date(`${item.dueDate}T12:00:00`).getDate() === day).map(item => ({ name:`ZIP · ${item.purchase.name}`, amount:item.amount, kind:"zip", paid:item.paid }));
+      const events = [...recurringEvents, ...zipEvents];
+      cells.push(`<div class="calendar-day ${outside ? "outside" : ""} ${isToday ? "today" : ""}"><span class="day-number">${day}</span>${events.slice(0,3).map(item => `<div class="calendar-event ${item.kind} ${item.paid ? "paid" : ""}" title="${escapeHtml(item.name)} · ${escapeHtml(formatMoney(item.amount))}">${escapeHtml(item.name)}</div>`).join("")}${events.length > 3 ? `<div class="calendar-event">+${events.length-3} more</div>` : ""}</div>`);
     }
     return cells.join("");
   }
 
   function upcomingForMonth(index) {
-    const items = [...data.recurring].sort((a,b) => number(a.dueDay)-number(b.dueDay));
+    const recurring = data.recurring.map(item => ({ day:number(item.dueDay), name:item.name, type:titleCase(item.kind), paid:Boolean(item.paid && item.paid[index]), amount:item.amount }));
+    const zip = zipPaymentsForMonth(index).map(item => ({ day:new Date(`${item.dueDate}T12:00:00`).getDate(), name:item.purchase.name, type:"ZIP installment", paid:item.paid, amount:item.amount }));
+    const items = [...recurring, ...zip].sort((a,b) => a.day-b.day);
     if (!items.length) return `<div class="empty-state"><div><strong>No payment dates</strong><p>Add a bill or subscription to place it on the calendar.</p></div></div>`;
-    return `<div class="upcoming-list">${items.map(item => `<div class="upcoming-row"><span class="due-date">${number(item.dueDay)}</span><div><strong>${escapeHtml(item.name)}</strong><small>${titleCase(item.kind)} · ${item.paid && item.paid[index] ? "Paid" : "Not paid"}</small></div><span>${escapeHtml(formatMoney(item.amount))}</span></div>`).join("")}</div>`;
+    return `<div class="upcoming-list">${items.map(item => `<div class="upcoming-row"><span class="due-date">${item.day}</span><div><strong>${escapeHtml(item.name)}</strong><small>${item.type} · ${item.paid ? "Paid" : "Not paid"}</small></div><span>${escapeHtml(formatMoney(item.amount))}</span></div>`).join("")}</div>`;
   }
 
   function renderCalendar() {
     const index = state.calendarMonth;
-    const totalDue = data.recurring.reduce((sum,item) => sum + number(item.amount),0);
+    const totalDue = data.recurring.reduce((sum,item) => sum + number(item.amount),0) + zipPaymentsForMonth(index).reduce((sum,item) => sum + number(item.amount),0);
     return `<div class="page-stack">
-      <div class="section-heading"><div><h2>Bills & subscriptions calendar</h2><p>See every recurring due date, payment status, note, and task in one place.</p></div><div class="section-actions"><select id="calendarMonthSelect">${MONTHS.map((month,i) => `<option value="${i}" ${i===index ? "selected" : ""}>${month}</option>`).join("")}</select><button class="secondary-button" data-action="add-recurring">+ Add payment</button></div></div>
+      <div class="section-heading"><div><h2>Payment calendar</h2><p>See bills, subscriptions, and ZIP installments together in one place.</p></div><div class="section-actions"><select id="calendarMonthSelect">${MONTHS.map((month,i) => `<option value="${i}" ${i===index ? "selected" : ""}>${month}</option>`).join("")}</select><button class="secondary-button" data-action="add-recurring">+ Add payment</button></div></div>
       <section class="calendar-shell">
         <aside class="calendar-side"><article class="card"><div class="card-header"><div><h3>${MONTHS[index]} due</h3><p>${formatMoney(totalDue)} total scheduled</p></div></div><div class="card-body">${upcomingForMonth(index)}</div></article><article class="card"><div class="card-header"><div><h3>Month notes</h3><p>Shared with the monthly page</p></div></div><div class="card-body"><textarea class="notes-area" data-calendar-notes placeholder="Add notes...">${escapeHtml(monthData(index).notes)}</textarea></div></article></aside>
-        <article class="card"><div class="card-body"><div class="calendar-heading"><div><p class="eyebrow">${data.settings.year}</p><h2>${MONTHS[index]}</h2></div><span class="status-badge paid">${data.recurring.length} recurring</span></div><div class="calendar-grid">${["SUN","MON","TUE","WED","THU","FRI","SAT"].map(day => `<div class="weekday">${day}</div>`).join("")}${calendarCells(index)}</div></div></article>
+        <article class="card"><div class="card-body"><div class="calendar-heading"><div><p class="eyebrow">${data.settings.year}</p><h2>${MONTHS[index]}</h2></div><span class="status-badge paid">${data.recurring.length + zipPaymentsForMonth(index).length} payments</span></div><div class="calendar-grid">${["SUN","MON","TUE","WED","THU","FRI","SAT"].map(day => `<div class="weekday">${day}</div>`).join("")}${calendarCells(index)}</div></div></article>
       </section>
       <article class="card"><div class="card-header"><div><h3>${MONTHS[index]} to-do list</h3><p>Tasks are shared with the monthly planner</p></div></div><div class="card-body">${renderTodos(index)}</div></article>
     </div>`;
@@ -753,6 +817,7 @@
       monthly: renderMonthly,
       transactions: renderTransactions,
       recurring: renderRecurring,
+      zip: renderZip,
       calendar: renderCalendar,
       categories: renderCategories,
       settings: renderSettings
@@ -838,6 +903,15 @@
       toast(`${item.name} marked ${input.checked ? "paid" : "not paid"} for ${MONTHS[number(input.dataset.month)]}`);
       if (state.view !== "recurring") render();
     }));
+    app.querySelectorAll("[data-zip-payment]").forEach(input => input.addEventListener("change", () => {
+      const purchase = data.zipPurchases.find(item => item.id === input.dataset.zipPayment);
+      const payment = purchase && purchase.payments[number(input.dataset.paymentIndex)];
+      if (!payment) return;
+      payment.paid = input.checked;
+      saveData();
+      render();
+      toast(`ZIP payment marked ${input.checked ? "paid" : "not paid"}`);
+    }));
 
     app.querySelectorAll("[data-category-form]").forEach(form => form.addEventListener("submit", event => {
       event.preventDefault();
@@ -917,9 +991,11 @@
     if (action === "edit-transaction") openEditTransactionModal(button.dataset.id, number(button.dataset.month));
     if (action === "add-income") openIncomeModal(state.month);
     if (action === "add-recurring") openRecurringModal(button.dataset.kind);
+    if (action === "add-zip") openZipModal();
     if (action === "delete-transaction") deleteTransaction(button.dataset.id, number(button.dataset.month));
     if (action === "delete-income") deleteIncome(button.dataset.id, number(button.dataset.month));
     if (action === "delete-recurring") deleteRecurring(button.dataset.id);
+    if (action === "delete-zip") deleteZipPurchase(button.dataset.id);
     if (action === "delete-category") deleteCategory(button.dataset.type, button.dataset.category);
     if (action === "delete-todo") deleteTodo(button.dataset.id);
     if (action === "export-json") exportJson();
@@ -1011,6 +1087,15 @@
     saveData();
     render();
     toast("Recurring payment deleted");
+  }
+
+  function deleteZipPurchase(id) {
+    const purchase = data.zipPurchases.find(item => item.id === id);
+    if (!purchase || !confirm(`Delete ${purchase.name} and its installment schedule?`)) return;
+    data.zipPurchases = data.zipPurchases.filter(item => item.id !== id);
+    saveData();
+    render();
+    toast("ZIP purchase deleted");
   }
 
   function deleteCategory(type, category) {
@@ -1154,6 +1239,38 @@
       closeModal();
       render();
       toast("Recurring payment added");
+    });
+    modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
+  }
+
+  function openZipModal() {
+    const localToday = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+    openModal("Add ZIP purchase", "INSTALLMENT PLAN", `<div class="form-grid">
+      <div class="field span-2"><label>Purchase name</label><input name="name" maxlength="80" placeholder="Shoes, electronics, furniture..." required></div>
+      <div class="field"><label>Store</label><input name="store" maxlength="70" placeholder="Store name"></div>
+      <div class="field"><label>Total purchase</label><input name="total" type="number" min="0.01" step="0.01" placeholder="0.00" required></div>
+      <div class="field"><label>First payment date</label><input name="firstDate" type="date" value="${localToday}" required></div>
+      <div class="field"><label>Number of payments</label><input name="installments" type="number" min="2" max="12" value="4" required></div>
+      <div class="field span-2"><label>Payment frequency</label><select name="frequency"><option value="14" selected>Every 2 weeks</option><option value="7">Every week</option><option value="30">Every 30 days</option></select></div>
+      <div class="field span-2"><label>Order number or notes</label><input name="notes" maxlength="120" placeholder="Optional"></div>
+    </div><div class="info-callout" style="margin-top:14px">TrueBalance will divide the total evenly. Each installment counts as an expense only after you check it as paid.</div><div class="modal-actions"><button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">Create payment plan</button></div>`, form => {
+      const total = Math.max(.01, number(form.get("total")));
+      const count = Math.min(12, Math.max(2, Math.round(number(form.get("installments")))));
+      const frequency = number(form.get("frequency")) || 14;
+      const first = new Date(`${String(form.get("firstDate"))}T12:00:00`);
+      const baseCents = Math.floor(Math.round(total * 100) / count);
+      let assignedCents = 0;
+      const payments = Array.from({length:count},(_,index) => {
+        const due = new Date(first); due.setDate(first.getDate() + frequency * index);
+        const cents = index === count - 1 ? Math.round(total * 100) - assignedCents : baseCents;
+        assignedCents += cents;
+        return { id:makeId(), dueDate:`${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,"0")}-${String(due.getDate()).padStart(2,"0")}`, amount:cents/100, paid:false };
+      });
+      data.zipPurchases.push({ id:makeId(), name:String(form.get("name") || "ZIP purchase").trim(), store:String(form.get("store") || "").trim(), total, notes:String(form.get("notes") || "").trim(), payments });
+      saveData();
+      closeModal();
+      render();
+      toast("ZIP payment plan added");
     });
     modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
   }
