@@ -34,3 +34,11 @@ drop trigger if exists set_budget_updated_at on public.budgets;
 create trigger set_budget_updated_at
 before update on public.budgets
 for each row execute function public.set_budget_updated_at();
+
+do $$
+begin
+  alter publication supabase_realtime add table public.budgets;
+exception
+  when duplicate_object then null;
+end;
+$$;
