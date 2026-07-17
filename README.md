@@ -30,6 +30,7 @@ You can also double-click `index.html` yourself.
 - Local automatic saving, JSON backup/import, printing, and responsive mobile layout
 - Custom tab ordering that saves automatically, with sidebar drag-and-drop on desktop and Move Up/Move Down controls on iPhone
 - Optional Supabase email accounts and encrypted-connection cloud sync across devices
+- Supabase Realtime updates across open devices, 250ms cloud saves, reconnect catch-up, and overwrite protection
 
 ## Important backup note
 
