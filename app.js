@@ -10,10 +10,11 @@
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
   const CATEGORY_EMOJIS = { housing:"🔑", rent:"🔑", car:"🚙", transportation:"🚙", groceries:"🥑", grocery:"🥑", dining:"🍔", restaurants:"🍔", clothing:"👕", personal:"👕", entertainment:"🎟️", utilities:"🏠", insurance:"🛡️", bills:"🧾", subscriptions:"📱", "zip payments":"💳", other:"✨" };
   const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","zip","calendar","categories"];
-  const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","monthly-spending","income-categories","highlights"];
+  const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","recurring-overview","monthly-spending","income-categories","highlights"];
   const DEFAULT_DASHBOARD_SIZES = {
     "cashflow": { width: "wide", height: "normal", font: "standard" },
     "annual-spending": { width: "small", height: "normal", font: "standard" },
+    "recurring-overview": { width: "full", height: "tall", font: "standard" },
     "monthly-spending": { width: "full", height: "tall", font: "standard" },
     "income-categories": { width: "half", height: "normal", font: "standard" },
     "highlights": { width: "half", height: "normal", font: "standard" }
@@ -561,6 +562,20 @@
     return `<div class="bar-list">${clean.map(item => `<div class="bar-row"><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2, item.value / max * 100)}%;background:${color}"></div></div><strong>${escapeHtml(formatMoney(item.value, true))}</strong></div>`).join("")}</div>`;
   }
 
+  function renderDashboardRecurring(monthIndex) {
+    const items = [...data.recurring].sort((a,b) => number(a.dueDay)-number(b.dueDay));
+    const total = items.reduce((sum,item) => sum + number(item.amount),0);
+    const paid = items.filter(item => item.paid && item.paid[monthIndex]).reduce((sum,item) => sum + number(item.amount),0);
+    const left = Math.max(0,total-paid);
+    const progress = total ? Math.min(100,paid/total*100) : 0;
+    const itemCards = items.map((item,index) => {
+      const appearance = categoryAppearance(item.name,index);
+      const checked = Boolean(item.paid && item.paid[monthIndex]);
+      return `<label class="dashboard-recurring-item ${checked ? "paid" : ""}" style="--recurring-color:${appearance.color}"><input type="checkbox" data-dashboard-recurring-check="${escapeHtml(item.id)}" data-month="${monthIndex}" ${checked ? "checked" : ""}><span class="dashboard-recurring-emoji">${escapeHtml(appearance.emoji === "•" ? (item.kind === "subscription" ? "🎧" : "🧾") : appearance.emoji)}</span><strong>${escapeHtml(item.name)}</strong><small>${formatMoney(item.amount)} · ${number(item.dueDay)}${number(item.dueDay) % 10 === 1 && number(item.dueDay) !== 11 ? "st" : number(item.dueDay) % 10 === 2 && number(item.dueDay) !== 12 ? "nd" : number(item.dueDay) % 10 === 3 && number(item.dueDay) !== 13 ? "rd" : "th"}</small><em>${checked ? "✓" : ""}</em></label>`;
+    }).join("");
+    return `<div class="dashboard-recurring-body"><div class="dashboard-recurring-summary"><div><strong>${formatMoney(left)}</strong><span>left to pay</span></div><div class="recurring-progress-ring" style="--progress:${progress}%"><i></i></div><div><strong>${formatMoney(paid)}</strong><span>paid so far</span></div></div><div class="dashboard-recurring-label">THIS MONTH</div><div class="dashboard-recurring-grid">${itemCards}<button class="dashboard-recurring-add" data-action="add-recurring" aria-label="Add recurring payment"><span>+</span><small>Add payment</small></button></div>${items.length ? `<div class="dashboard-recurring-footer"><span>${items.filter(item => item.paid && item.paid[monthIndex]).length} of ${items.length} payments complete</span><button class="ghost-button compact" data-view-jump="recurring">View all payments</button></div>` : `<div class="empty-state"><div><strong>No recurring payments yet</strong><p>Add a bill or subscription here and it will connect to every budget total.</p></div></div>`}</div>`;
+  }
+
   function renderDashboard() {
     const annual = annualTotals();
     const monthIncome = annual.months.map(month => month.income);
@@ -579,6 +594,7 @@
     const widgets = {
       "cashflow": widgetShell("cashflow", `<div class="card-header"><div><h3>Cash flow by month</h3><p>Income compared with actual spending</p></div><span class="status-badge ${net >= 0 ? "paid" : "due"}">${net >= 0 ? "Positive" : "Negative"}</span></div><div class="card-body chart-wrap">${renderLineChart(monthIncome, monthExpenses)}</div>`),
       "annual-spending": widgetShell("annual-spending", `<div class="card-header"><div><h3>Annual spending</h3><p>Actual expenses by category</p></div></div><div class="card-body">${renderDonut(expenseBreakdown)}</div>`),
+      "recurring-overview": widgetShell("recurring-overview", `<div class="card-header"><div><h3>Recurring bills & subscriptions</h3><p>Track monthly payments without leaving the Dashboard</p></div><div class="section-actions"><select id="dashboardRecurringMonth" aria-label="Choose recurring-payment month">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select><button class="secondary-button compact" data-action="add-recurring">+ Add</button></div></div>${renderDashboardRecurring(state.dashboardMonth)}`),
       "monthly-spending": widgetShell("monthly-spending", `<div class="card-header"><div><h3>Monthly spending</h3><p>Actual expenses by category for ${MONTHS[state.dashboardMonth]}</p></div><select id="dashboardSpendingMonth" aria-label="Choose month for spending wheel">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select></div><div class="card-body">${renderDonut(monthlyExpenseBreakdown, `${SHORT_MONTHS[state.dashboardMonth]} SPENT`)}</div>`),
       "income-categories": widgetShell("income-categories", `<div class="card-header"><div><h3>Income categories</h3><p>Where your income came from</p></div></div><div class="card-body">${renderBars(incomeBreakdown)}</div>`),
       "highlights": widgetShell("highlights", `<div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary"><div class="mini-summary"><label>Highest income month</label><strong>${monthIncome[highestIncomeIndex] ? MONTHS[highestIncomeIndex] : "—"}</strong></div><div class="mini-summary"><label>Highest expense month</label><strong>${monthExpenses[highestExpenseIndex] ? MONTHS[highestExpenseIndex] : "—"}</strong></div><div class="mini-summary"><label>Debt reduction</label><strong class="${annual.debtReduction >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(annual.debtReduction)}</strong></div></div></div>`)
@@ -1119,6 +1135,14 @@
       toast(`${item.name} marked ${input.checked ? "paid" : "not paid"} for ${MONTHS[number(input.dataset.month)]}`);
       if (state.view !== "recurring") render();
     }));
+    app.querySelectorAll("[data-dashboard-recurring-check]").forEach(input => input.addEventListener("change", () => {
+      const item = data.recurring.find(entry => entry.id === input.dataset.dashboardRecurringCheck);
+      if (!item) return;
+      item.paid[number(input.dataset.month)] = input.checked;
+      saveData();
+      render();
+      toast(`${item.name} marked ${input.checked ? "paid" : "not paid"}`);
+    }));
     app.querySelectorAll("[data-zip-payment]").forEach(input => input.addEventListener("change", () => {
       const purchase = data.zipPurchases.find(item => item.id === input.dataset.zipPayment);
       const payment = purchase && purchase.payments[number(input.dataset.paymentIndex)];
@@ -1188,6 +1212,8 @@
     if (recurringBulkMonth) recurringBulkMonth.addEventListener("change", () => { state.recurringMonth = number(recurringBulkMonth.value); render(); });
     const dashboardSpendingMonth = document.getElementById("dashboardSpendingMonth");
     if (dashboardSpendingMonth) dashboardSpendingMonth.addEventListener("change", () => { state.dashboardMonth = number(dashboardSpendingMonth.value); render(); });
+    const dashboardRecurringMonth = document.getElementById("dashboardRecurringMonth");
+    if (dashboardRecurringMonth) dashboardRecurringMonth.addEventListener("change", () => { state.dashboardMonth = number(dashboardRecurringMonth.value); render(); });
 
     const settingsForm = document.getElementById("settingsForm");
     if (settingsForm) settingsForm.addEventListener("submit", event => {
