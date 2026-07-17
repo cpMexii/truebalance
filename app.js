@@ -60,7 +60,7 @@
     const year = new Date().getFullYear();
     return {
       version: 2,
-      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", visualTheme: "classic", accentColor: "#79e7bc", cornerStyle: "rounded", density: "comfortable", categoryStyle: "pills", categoryAppearance: {}, tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {}, boxOrder: {} },
+      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", visualTheme: "midnight", accentColor: "#63b3ff", cornerStyle: "rounded", density: "comfortable", categoryStyle: "pills", designVersion: 2, categoryAppearance: {}, tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {}, boxOrder: {} },
       categories: {
         income: ["Paycheck", "Side income"],
         expense: ["Housing", "Utilities", "Groceries", "Transportation", "Insurance", "Dining", "Entertainment", "Personal", "Other"],
@@ -76,8 +76,16 @@
   function normalizeData(candidate) {
     const base = defaultData();
     const data = candidate && typeof candidate === "object" ? candidate : base;
+    const previousDesignVersion = Number(data.settings && data.settings.designVersion) || 0;
     data.version = 2;
     data.settings = { ...base.settings, ...(data.settings || {}) };
+    if (previousDesignVersion < 2) {
+      data.settings.visualTheme = "midnight";
+      data.settings.accentColor = "#63b3ff";
+      data.settings.cornerStyle = "rounded";
+      data.settings.categoryStyle = "pills";
+      data.settings.designVersion = 2;
+    }
     const savedTabOrder = Array.isArray(data.settings.tabOrder) ? data.settings.tabOrder : [];
     data.settings.tabOrder = [...new Set(savedTabOrder.filter(tab => DEFAULT_TAB_ORDER.includes(tab)))];
     DEFAULT_TAB_ORDER.forEach(tab => { if (!data.settings.tabOrder.includes(tab)) data.settings.tabOrder.push(tab); });
@@ -1035,6 +1043,7 @@
     document.body.dataset.cornerStyle = data.settings.cornerStyle;
     document.body.dataset.density = data.settings.density;
     document.documentElement.style.setProperty("--mint", data.settings.accentColor);
+    document.documentElement.style.setProperty("--user-accent", data.settings.accentColor);
     const renderers = {
       dashboard: renderDashboard,
       monthly: renderMonthly,
