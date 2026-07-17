@@ -18,6 +18,9 @@ You can also double-click `index.html` yourself.
 - Advanced per-box customization with 25%, 33%, 50%, 67%, 75%, full, and original width choices
 - Five height choices and four independent text sizes for every customizable box
 - Saved box ordering with desktop drag-and-drop, mobile arrows, per-tab reset, and Dashboard reset
+- Midnight Blue reference-inspired theme, TrueBalance Classic, and Deep Black appearance presets
+- Custom accent color, card corner shape, comfortable/compact spacing, and category label style
+- Editable expense-category emojis and colors with visual budget pills
 - Small, standard, large, and extra-large app font settings
 - Separate monthly planners for January through December
 - Custom income, expense, debt, and savings categories
