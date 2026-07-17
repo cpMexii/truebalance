@@ -31,6 +31,7 @@ You can also double-click `index.html` yourself.
 - Custom tab ordering that saves automatically, with sidebar drag-and-drop on desktop and Move Up/Move Down controls on iPhone
 - Optional Supabase email accounts and encrypted-connection cloud sync across devices
 - Supabase Realtime updates across open devices, 250ms cloud saves, reconnect catch-up, and overwrite protection
+- Full-access household sharing with separate member logins and private invitation codes
 
 ## Important backup note
 
