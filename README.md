@@ -19,7 +19,7 @@ You can also double-click `index.html` yourself.
 - Five height choices and four independent text sizes for every customizable box
 - Saved box ordering with desktop drag-and-drop, mobile arrows, per-tab reset, and Dashboard reset
 - Midnight Blue reference-inspired theme, TrueBalance Classic, and Deep Black appearance presets
-- Full-app Midnight design system by default, with softly layered navy cards, blue controls, spacious payment tiles, and the original side navigation drawer on iPhone
+- Full-app Midnight design system by default, with softly layered navy cards, blue controls, spacious payment tiles, and an always-visible left navigation rail on iPhone
 - Custom accent color, card corner shape, comfortable/compact spacing, and category label style
 - Editable expense-category emojis and colors with visual budget pills
 - Small, standard, large, and extra-large app font settings
