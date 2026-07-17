@@ -28,6 +28,7 @@ You can also double-click `index.html` yourself.
 - Editable category dropdown on every transaction for quick corrections
 - Full editing for saved transactions, including month, date, category, description, and amount
 - Bills and subscription tracker with a paid checkbox for every month
+- Movable Dashboard recurring-payment box with progress ring, paid/remaining totals, payment cards, quick checkoffs, month selection, and quick add
 - ZIP purchase tracker with automatic installment schedules, paid/overdue status, remaining balances, and Calendar integration
 - Paid ZIP installments automatically included in monthly, weekly, and annual spending totals
 - Check or clear every bill and subscription at once for a selected month
