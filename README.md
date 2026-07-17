@@ -38,6 +38,8 @@ You can also double-click `index.html` yourself.
 - Payment calendar, notes, and monthly to-do lists
 - Local automatic saving, JSON backup/import, printing, and responsive mobile layout
 - Custom tab ordering that saves automatically, with sidebar drag-and-drop on desktop and Move Up/Move Down controls on iPhone
+- Collapsible sidebar with its expanded or compact state saved across sessions
+- Hide and restore Dashboard widgets or boxes on any tab without deleting their data
 - Optional Supabase email accounts and encrypted-connection cloud sync across devices
 - Supabase Realtime updates across open devices, 250ms cloud saves, reconnect catch-up, and overwrite protection
 - Full-access household sharing with separate member logins and private invitation codes
