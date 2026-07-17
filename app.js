@@ -11,11 +11,11 @@
   const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","zip","calendar","categories"];
   const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","monthly-spending","income-categories","highlights"];
   const DEFAULT_DASHBOARD_SIZES = {
-    "cashflow": { width: "wide", height: "normal" },
-    "annual-spending": { width: "small", height: "normal" },
-    "monthly-spending": { width: "full", height: "tall" },
-    "income-categories": { width: "half", height: "normal" },
-    "highlights": { width: "half", height: "normal" }
+    "cashflow": { width: "wide", height: "normal", font: "standard" },
+    "annual-spending": { width: "small", height: "normal", font: "standard" },
+    "monthly-spending": { width: "full", height: "tall", font: "standard" },
+    "income-categories": { width: "half", height: "normal", font: "standard" },
+    "highlights": { width: "half", height: "normal", font: "standard" }
   };
   const VIEW_META = {
     dashboard: ["OVERVIEW", "Dashboard"],
@@ -58,7 +58,7 @@
     const year = new Date().getFullYear();
     return {
       version: 2,
-      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {} },
+      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {}, boxOrder: {} },
       categories: {
         income: ["Paycheck", "Side income"],
         expense: ["Housing", "Utilities", "Groceries", "Transportation", "Insurance", "Dining", "Entertainment", "Personal", "Other"],
@@ -87,12 +87,14 @@
     DEFAULT_DASHBOARD_ORDER.forEach(widget => {
       const candidate = savedSizes[widget] || {};
       data.settings.dashboardSizes[widget] = {
-        width: ["small","half","wide","full"].includes(candidate.width) ? candidate.width : DEFAULT_DASHBOARD_SIZES[widget].width,
-        height: ["compact","normal","tall"].includes(candidate.height) ? candidate.height : DEFAULT_DASHBOARD_SIZES[widget].height
+        width: ["quarter","small","third","half","twothirds","wide","full"].includes(candidate.width) ? candidate.width : DEFAULT_DASHBOARD_SIZES[widget].width,
+        height: ["xcompact","compact","normal","tall","xlarge"].includes(candidate.height) ? candidate.height : DEFAULT_DASHBOARD_SIZES[widget].height,
+        font: ["small","standard","large","xlarge"].includes(candidate.font) ? candidate.font : "standard"
       };
     });
     if (!["small","standard","large","xlarge"].includes(data.settings.fontSize)) data.settings.fontSize = "standard";
     if (!data.settings.boxSizes || typeof data.settings.boxSizes !== "object" || Array.isArray(data.settings.boxSizes)) data.settings.boxSizes = {};
+    if (!data.settings.boxOrder || typeof data.settings.boxOrder !== "object" || Array.isArray(data.settings.boxOrder)) data.settings.boxOrder = {};
     data.categories = { ...base.categories, ...(data.categories || {}) };
     for (const type of ["income", "expense", "debt", "savings"]) {
       if (!Array.isArray(data.categories[type])) data.categories[type] = [...base.categories[type]];
@@ -562,10 +564,10 @@
     const expenseBreakdown = annualExpenseBreakdown();
     const monthlyExpenseBreakdown = expenseBreakdownForMonth(state.dashboardMonth);
     const incomeBreakdown = categoryAnnualTotals("income");
-    const widgetTools = id => state.dashboardArrange ? `<div class="dashboard-widget-tools"><span class="drag-grip" title="Drag to move">☰</span><label>Width<select data-dashboard-size="${id}" data-dimension="width" aria-label="Box width"><option value="small">Small</option><option value="half">Half</option><option value="wide">Wide</option><option value="full">Full</option></select></label><label>Height<select data-dashboard-size="${id}" data-dimension="height" aria-label="Box height"><option value="compact">Short</option><option value="normal">Normal</option><option value="tall">Tall</option></select></label><button class="ghost-button compact" data-action="move-dashboard-up" data-widget="${id}" aria-label="Move box up">↑</button><button class="ghost-button compact" data-action="move-dashboard-down" data-widget="${id}" aria-label="Move box down">↓</button></div>` : "";
+    const widgetTools = id => state.dashboardArrange ? `<div class="dashboard-widget-tools"><span class="drag-grip" title="Drag to move">☰</span><label>Width<select data-dashboard-size="${id}" data-dimension="width" aria-label="Box width"><option value="quarter">25%</option><option value="small">33%</option><option value="half">50%</option><option value="twothirds">67%</option><option value="wide">75%</option><option value="full">100%</option></select></label><label>Height<select data-dashboard-size="${id}" data-dimension="height" aria-label="Box height"><option value="xcompact">Extra short</option><option value="compact">Short</option><option value="normal">Auto</option><option value="tall">Tall</option><option value="xlarge">Extra tall</option></select></label><label>Text<select data-dashboard-size="${id}" data-dimension="font" aria-label="Box text size"><option value="small">Small</option><option value="standard">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><button class="ghost-button compact" data-action="move-dashboard-up" data-widget="${id}" aria-label="Move box up">↑</button><button class="ghost-button compact" data-action="move-dashboard-down" data-widget="${id}" aria-label="Move box down">↓</button></div>` : "";
     const widgetShell = (id, content) => {
       const size = data.settings.dashboardSizes[id];
-      return `<article class="card dashboard-widget widget-${size.width} height-${size.height} ${state.dashboardArrange ? "arranging" : ""}" data-dashboard-widget="${id}" draggable="${state.dashboardArrange}">${widgetTools(id)}${content}</article>`;
+      return `<article class="card dashboard-widget widget-${size.width} height-${size.height} dashboard-font-${size.font} ${state.dashboardArrange ? "arranging" : ""}" data-dashboard-widget="${id}" draggable="${state.dashboardArrange}">${widgetTools(id)}${content}</article>`;
     };
     const widgets = {
       "cashflow": widgetShell("cashflow", `<div class="card-header"><div><h3>Cash flow by month</h3><p>Income compared with actual spending</p></div><span class="status-badge ${net >= 0 ? "paid" : "due"}">${net >= 0 ? "Positive" : "Negative"}</span></div><div class="card-body chart-wrap">${renderLineChart(monthIncome, monthExpenses)}</div>`),
@@ -575,7 +577,7 @@
       "highlights": widgetShell("highlights", `<div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary"><div class="mini-summary"><label>Highest income month</label><strong>${monthIncome[highestIncomeIndex] ? MONTHS[highestIncomeIndex] : "—"}</strong></div><div class="mini-summary"><label>Highest expense month</label><strong>${monthExpenses[highestExpenseIndex] ? MONTHS[highestExpenseIndex] : "—"}</strong></div><div class="mini-summary"><label>Debt reduction</label><strong class="${annual.debtReduction >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(annual.debtReduction)}</strong></div></div></div>`)
     };
     return `<div class="page-stack">
-      <div class="section-heading"><div><h2>${escapeHtml(data.settings.name)}</h2><p>Your ${data.settings.year} plan at a glance. Every figure updates as you enter monthly data.</p></div><div class="section-actions"><button class="ghost-button" data-action="arrange-dashboard">${state.dashboardArrange ? "Done arranging" : "Rearrange boxes"}</button><button class="ghost-button" data-action="print">Print dashboard</button><button class="secondary-button" data-view-jump="monthly">Open monthly planner</button></div></div>
+      <div class="section-heading"><div><h2>${escapeHtml(data.settings.name)}</h2><p>Your ${data.settings.year} plan at a glance. Every figure updates as you enter monthly data.</p></div><div class="section-actions"><button class="ghost-button" data-action="arrange-dashboard">${state.dashboardArrange ? "Done customizing" : "Customize boxes"}</button>${state.dashboardArrange ? `<button class="ghost-button" data-action="reset-dashboard-layout">Reset dashboard</button>` : ""}<button class="ghost-button" data-action="print">Print dashboard</button><button class="secondary-button" data-view-jump="monthly">Open monthly planner</button></div></div>
       <section class="stats-grid">
         ${statCard("Annual income", formatMoney(annual.income), `Average ${formatMoney(annual.income/12, true)} per month`, "var(--mint)")}
         ${statCard("Annual expenses", formatMoney(annual.expenses), `${annual.income ? Math.round(annual.expenses/annual.income*100) : 0}% of income`, "var(--violet)")}
@@ -909,18 +911,81 @@
   function prepareResizableBoxes() {
     app.classList.toggle("resize-boxes-mode", state.resizeBoxes);
     const cards = [...app.querySelectorAll("article.card:not(.dashboard-widget)")];
+    const titleCounts = {};
     cards.forEach((card, index) => {
-      const title = card.querySelector("h3")?.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `box-${index + 1}`;
+      const baseTitle = card.querySelector("h3")?.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `box-${index + 1}`;
+      titleCounts[baseTitle] = (titleCounts[baseTitle] || 0) + 1;
+      const title = titleCounts[baseTitle] > 1 ? `${baseTitle}-${titleCounts[baseTitle]}` : baseTitle;
       const key = `${state.view}:${title}`;
-      const saved = data.settings.boxSizes[key] || { width: "standard", height: "normal" };
+      const saved = { width: "standard", height: "normal", font: "standard", ...(data.settings.boxSizes[key] || {}) };
       card.dataset.boxSizeKey = key;
-      card.classList.add(`global-width-${saved.width}`, `global-height-${saved.height}`);
+      card.classList.add(`global-width-${saved.width || "standard"}`, `global-height-${saved.height || "normal"}`, `global-font-${saved.font || "standard"}`);
+    });
+    const savedOrder = Array.isArray(data.settings.boxOrder[state.view]) ? data.settings.boxOrder[state.view] : [];
+    [...new Set(cards.map(card => card.parentElement))].forEach(parent => {
+      const siblings = cards.filter(card => card.parentElement === parent);
+      siblings.sort((a,b) => {
+        const ai = savedOrder.indexOf(a.dataset.boxSizeKey), bi = savedOrder.indexOf(b.dataset.boxSizeKey);
+        return (ai < 0 ? 9999 : ai) - (bi < 0 ? 9999 : bi);
+      }).forEach(card => parent.appendChild(card));
+    });
+    if (state.resizeBoxes && state.view !== "dashboard") app.insertAdjacentHTML("afterbegin", `<div class="layout-customize-banner"><div><strong>Customize ${escapeHtml(VIEW_META[state.view][1])}</strong><span>Resize, change text, drag boxes, or use the arrows on mobile.</span></div><button class="ghost-button compact" data-reset-page-layout>Reset this tab</button></div>`);
+    cards.forEach(card => {
       if (!state.resizeBoxes) return;
-      card.insertAdjacentHTML("afterbegin", `<div class="global-box-tools"><span>Resize</span><label>Width<select data-global-box-size="${escapeHtml(key)}" data-dimension="width"><option value="standard">Standard</option><option value="half">Half</option><option value="wide">Wide</option><option value="full">Full</option></select></label><label>Height<select data-global-box-size="${escapeHtml(key)}" data-dimension="height"><option value="compact">Short</option><option value="normal">Normal</option><option value="tall">Tall</option></select></label><button class="ghost-button compact" type="button" data-reset-box-size="${escapeHtml(key)}">Reset</button></div>`);
+      const key = card.dataset.boxSizeKey;
+      const saved = { width: "standard", height: "normal", font: "standard", ...(data.settings.boxSizes[key] || {}) };
+      card.draggable = true;
+      card.insertAdjacentHTML("afterbegin", `<div class="global-box-tools"><span class="global-drag-grip" title="Drag to move">☰</span><label>Width<select data-global-box-size="${escapeHtml(key)}" data-dimension="width"><option value="standard">Standard</option><option value="quarter">25%</option><option value="third">33%</option><option value="half">50%</option><option value="twothirds">67%</option><option value="wide">75%</option><option value="full">100%</option></select></label><label>Height<select data-global-box-size="${escapeHtml(key)}" data-dimension="height"><option value="xcompact">Extra short</option><option value="compact">Short</option><option value="normal">Auto</option><option value="tall">Tall</option><option value="xlarge">Extra tall</option></select></label><label>Text<select data-global-box-size="${escapeHtml(key)}" data-dimension="font"><option value="small">Small</option><option value="standard">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><button class="ghost-button compact" type="button" data-move-global-box="${escapeHtml(key)}" data-offset="-1" aria-label="Move box up">↑</button><button class="ghost-button compact" type="button" data-move-global-box="${escapeHtml(key)}" data-offset="1" aria-label="Move box down">↓</button><button class="ghost-button compact" type="button" data-reset-box-size="${escapeHtml(key)}">Reset</button></div>`);
       card.querySelectorAll("[data-global-box-size]").forEach(select => { select.value = saved[select.dataset.dimension]; });
     });
     const toggle = document.getElementById("toggleResizeBoxes");
-    if (toggle) { toggle.textContent = state.resizeBoxes ? "Done resizing" : "Resize boxes"; toggle.classList.toggle("active", state.resizeBoxes); }
+    if (toggle) { toggle.textContent = state.resizeBoxes ? "Done customizing" : "Customize layout"; toggle.classList.toggle("active", state.resizeBoxes); }
+  }
+
+  function saveGlobalBoxOrder() {
+    data.settings.boxOrder[state.view] = [...app.querySelectorAll("article.card:not(.dashboard-widget)")].map(card => card.dataset.boxSizeKey);
+    saveData();
+  }
+
+  function moveGlobalBox(key, offset) {
+    const card = [...app.querySelectorAll("[data-box-size-key]")].find(item => item.dataset.boxSizeKey === key);
+    if (!card) return;
+    const siblings = [...card.parentElement.children].filter(item => item.matches && item.matches("article.card:not(.dashboard-widget)"));
+    const index = siblings.indexOf(card), target = siblings[index + offset];
+    if (!target) return;
+    if (offset < 0) card.parentElement.insertBefore(card, target);
+    else card.parentElement.insertBefore(target, card);
+    saveGlobalBoxOrder();
+    render();
+    toast("Box order saved");
+  }
+
+  function bindGlobalBoxDragging() {
+    let dragged = null;
+    app.querySelectorAll("article.card:not(.dashboard-widget)").forEach(card => {
+      card.addEventListener("dragstart", event => {
+        if (event.target.closest("button,select,input,textarea,label")) { event.preventDefault(); return; }
+        dragged = card;
+        card.classList.add("dragging");
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      });
+      card.addEventListener("dragend", () => { card.classList.remove("dragging"); dragged = null; });
+      card.addEventListener("dragover", event => {
+        if (!dragged || dragged.parentElement !== card.parentElement || dragged === card) return;
+        event.preventDefault();
+        card.classList.add("drag-over");
+      });
+      card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+      card.addEventListener("drop", event => {
+        event.preventDefault();
+        card.classList.remove("drag-over");
+        if (!dragged || dragged.parentElement !== card.parentElement || dragged === card) return;
+        card.parentElement.insertBefore(dragged, card);
+        saveGlobalBoxOrder();
+        render();
+        toast("Box order saved");
+      });
+    });
   }
 
   function render() {
@@ -985,7 +1050,7 @@
     });
     app.querySelectorAll("[data-global-box-size]").forEach(select => select.addEventListener("change", () => {
       const key = select.dataset.globalBoxSize;
-      const saved = data.settings.boxSizes[key] || { width: "standard", height: "normal" };
+      const saved = { width: "standard", height: "normal", font: "standard", ...(data.settings.boxSizes[key] || {}) };
       saved[select.dataset.dimension] = select.value;
       data.settings.boxSizes[key] = saved;
       saveData();
@@ -998,6 +1063,15 @@
       render();
       toast("Box size reset");
     }));
+    app.querySelectorAll("[data-move-global-box]").forEach(button => button.addEventListener("click", () => moveGlobalBox(button.dataset.moveGlobalBox, number(button.dataset.offset))));
+    app.querySelectorAll("[data-reset-page-layout]").forEach(button => button.addEventListener("click", () => {
+      Object.keys(data.settings.boxSizes).filter(key => key.startsWith(`${state.view}:`)).forEach(key => delete data.settings.boxSizes[key]);
+      delete data.settings.boxOrder[state.view];
+      saveData();
+      render();
+      toast("This tab's layout was reset");
+    }));
+    if (state.resizeBoxes && state.view !== "dashboard") bindGlobalBoxDragging();
     if (state.dashboardArrange) bindDashboardDragging();
     app.querySelectorAll("[data-transaction-category]").forEach(select => select.addEventListener("change", () => {
       const monthIndex = number(select.dataset.month);
@@ -1137,6 +1211,13 @@
     if (action === "check-all-recurring") setAllRecurring(true);
     if (action === "clear-all-recurring") setAllRecurring(false);
     if (action === "arrange-dashboard") { state.dashboardArrange = !state.dashboardArrange; render(); }
+    if (action === "reset-dashboard-layout") {
+      data.settings.dashboardOrder = [...DEFAULT_DASHBOARD_ORDER];
+      data.settings.dashboardSizes = structuredClone(DEFAULT_DASHBOARD_SIZES);
+      saveData();
+      render();
+      toast("Dashboard layout reset");
+    }
     if (action === "move-dashboard-up") moveDashboardWidget(button.dataset.widget, -1);
     if (action === "move-dashboard-down") moveDashboardWidget(button.dataset.widget, 1);
   }
