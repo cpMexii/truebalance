@@ -1,5 +1,5 @@
-const CACHE = "truebalance-budget-v10";
-const FILES = ["./", "./index.html", "./styles.css", "./config.js", "./supabase-client.js", "./app.js", "./favicon.svg", "./manifest.webmanifest"];
+const CACHE = "truebalance-budget-v11";
+const FILES = ["./", "./index.html", "./styles.css?v=11", "./config.js", "./supabase-client.js", "./app.js", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
