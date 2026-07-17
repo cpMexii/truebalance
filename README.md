@@ -19,7 +19,7 @@ You can also double-click `index.html` yourself.
 - Five height choices and four independent text sizes for every customizable box
 - Saved box ordering with desktop drag-and-drop, mobile arrows, per-tab reset, and Dashboard reset
 - Midnight Blue reference-inspired theme, TrueBalance Classic, and Deep Black appearance presets
-- Full-app Midnight design system by default, with softly layered navy cards, blue controls, spacious payment tiles, and an iPhone bottom navigation dock
+- Full-app Midnight design system by default, with softly layered navy cards, blue controls, spacious payment tiles, and the original side navigation drawer on iPhone
 - Custom accent color, card corner shape, comfortable/compact spacing, and category label style
 - Editable expense-category emojis and colors with visual budget pills
 - Small, standard, large, and extra-large app font settings
@@ -29,6 +29,7 @@ You can also double-click `index.html` yourself.
 - Editable category dropdown on every transaction for quick corrections
 - Full editing for saved transactions, including month, date, category, description, and amount
 - Bills and subscription tracker with a paid checkbox for every month
+- Editable bill and subscription icons, plus custom photo or logo uploads that sync with the budget
 - Movable Dashboard recurring-payment box with progress ring, paid/remaining totals, payment cards, quick checkoffs, month selection, and quick add
 - ZIP purchase tracker with automatic installment schedules, paid/overdue status, remaining balances, and Calendar integration
 - Paid ZIP installments automatically included in monthly, weekly, and annual spending totals
