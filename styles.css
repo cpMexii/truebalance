@@ -308,6 +308,8 @@ input::placeholder, textarea::placeholder { color: #58637a; }
 .cloud-account span, .cloud-account strong { display: block; }
 .cloud-account span { color: var(--muted); font-size: 9px; margin-bottom: 5px; }
 .cloud-account strong { font-size: 12px; overflow-wrap: anywhere; }
+.cloud-live-status { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--mint); font-size: 9px; font-weight: 750; }
+.cloud-live-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
 .info-callout { padding: 13px 14px; border-radius: 9px; background: rgba(118,182,255,.07); border: 1px solid rgba(118,182,255,.16); color: #b9cce8; font-size: 10px; line-height: 1.55; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 18px; background: rgba(3,6,15,.75); backdrop-filter: blur(8px); }
