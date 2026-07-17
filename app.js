@@ -12,6 +12,7 @@
   const CATEGORY_EMOJIS = { housing:"🔑", rent:"🔑", car:"🚙", transportation:"🚙", groceries:"🥑", grocery:"🥑", dining:"🍔", restaurants:"🍔", clothing:"👕", personal:"👕", entertainment:"🎟️", utilities:"🏠", insurance:"🛡️", bills:"🧾", subscriptions:"📱", "zip payments":"💳", other:"✨" };
   const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","zip","calendar","categories"];
   const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","recurring-overview","monthly-spending","income-categories","highlights"];
+  const DASHBOARD_WIDGET_LABELS = { "cashflow":"Cash flow by month", "annual-spending":"Annual spending", "recurring-overview":"Recurring bills & subscriptions", "monthly-spending":"Monthly spending", "income-categories":"Income categories", "highlights":"Year highlights" };
   const DEFAULT_DASHBOARD_SIZES = {
     "cashflow": { width: "wide", height: "normal", font: "standard" },
     "annual-spending": { width: "small", height: "normal", font: "standard" },
@@ -61,7 +62,7 @@
     const year = new Date().getFullYear();
     return {
       version: 2,
-      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", visualTheme: "midnight", accentColor: "#63b3ff", cornerStyle: "rounded", density: "comfortable", categoryStyle: "pills", designVersion: 2, categoryAppearance: {}, tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {}, boxOrder: {} },
+      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", visualTheme: "midnight", accentColor: "#63b3ff", cornerStyle: "rounded", density: "comfortable", categoryStyle: "pills", designVersion: 2, sidebarCollapsed: false, hiddenDashboardWidgets: [], hiddenBoxes: {}, categoryAppearance: {}, tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {}, boxOrder: {} },
       categories: {
         income: ["Paycheck", "Side income"],
         expense: ["Housing", "Utilities", "Groceries", "Transportation", "Insurance", "Dining", "Entertainment", "Personal", "Other"],
@@ -112,6 +113,10 @@
     if (!data.settings.categoryAppearance || typeof data.settings.categoryAppearance !== "object" || Array.isArray(data.settings.categoryAppearance)) data.settings.categoryAppearance = {};
     if (!data.settings.boxSizes || typeof data.settings.boxSizes !== "object" || Array.isArray(data.settings.boxSizes)) data.settings.boxSizes = {};
     if (!data.settings.boxOrder || typeof data.settings.boxOrder !== "object" || Array.isArray(data.settings.boxOrder)) data.settings.boxOrder = {};
+    data.settings.sidebarCollapsed = Boolean(data.settings.sidebarCollapsed);
+    if (!Array.isArray(data.settings.hiddenDashboardWidgets)) data.settings.hiddenDashboardWidgets = [];
+    data.settings.hiddenDashboardWidgets = [...new Set(data.settings.hiddenDashboardWidgets.filter(id => DEFAULT_DASHBOARD_ORDER.includes(id)))];
+    if (!data.settings.hiddenBoxes || typeof data.settings.hiddenBoxes !== "object" || Array.isArray(data.settings.hiddenBoxes)) data.settings.hiddenBoxes = {};
     data.categories = { ...base.categories, ...(data.categories || {}) };
     for (const type of ["income", "expense", "debt", "savings"]) {
       if (!Array.isArray(data.categories[type])) data.categories[type] = [...base.categories[type]];
@@ -608,7 +613,7 @@
     const expenseBreakdown = annualExpenseBreakdown();
     const monthlyExpenseBreakdown = expenseBreakdownForMonth(state.dashboardMonth);
     const incomeBreakdown = categoryAnnualTotals("income");
-    const widgetTools = id => state.dashboardArrange ? `<div class="dashboard-widget-tools"><span class="drag-grip" title="Drag to move">☰</span><label>Width<select data-dashboard-size="${id}" data-dimension="width" aria-label="Box width"><option value="quarter">25%</option><option value="small">33%</option><option value="half">50%</option><option value="twothirds">67%</option><option value="wide">75%</option><option value="full">100%</option></select></label><label>Height<select data-dashboard-size="${id}" data-dimension="height" aria-label="Box height"><option value="xcompact">Extra short</option><option value="compact">Short</option><option value="normal">Auto</option><option value="tall">Tall</option><option value="xlarge">Extra tall</option></select></label><label>Text<select data-dashboard-size="${id}" data-dimension="font" aria-label="Box text size"><option value="small">Small</option><option value="standard">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><button class="ghost-button compact" data-action="move-dashboard-up" data-widget="${id}" aria-label="Move box up">↑</button><button class="ghost-button compact" data-action="move-dashboard-down" data-widget="${id}" aria-label="Move box down">↓</button></div>` : "";
+    const widgetTools = id => state.dashboardArrange ? `<div class="dashboard-widget-tools"><span class="drag-grip" title="Drag to move">☰</span><label>Width<select data-dashboard-size="${id}" data-dimension="width" aria-label="Box width"><option value="quarter">25%</option><option value="small">33%</option><option value="half">50%</option><option value="twothirds">67%</option><option value="wide">75%</option><option value="full">100%</option></select></label><label>Height<select data-dashboard-size="${id}" data-dimension="height" aria-label="Box height"><option value="xcompact">Extra short</option><option value="compact">Short</option><option value="normal">Auto</option><option value="tall">Tall</option><option value="xlarge">Extra tall</option></select></label><label>Text<select data-dashboard-size="${id}" data-dimension="font" aria-label="Box text size"><option value="small">Small</option><option value="standard">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><button class="ghost-button compact" data-action="move-dashboard-up" data-widget="${id}" aria-label="Move box up">↑</button><button class="ghost-button compact" data-action="move-dashboard-down" data-widget="${id}" aria-label="Move box down">↓</button><button class="ghost-button compact hide-box-button" data-action="hide-dashboard-widget" data-widget="${id}">Hide</button></div>` : "";
     const widgetShell = (id, content) => {
       const size = data.settings.dashboardSizes[id];
       return `<article class="card dashboard-widget widget-${size.width} height-${size.height} dashboard-font-${size.font} ${state.dashboardArrange ? "arranging" : ""}" data-dashboard-widget="${id}" draggable="${state.dashboardArrange}">${widgetTools(id)}${content}</article>`;
@@ -621,6 +626,8 @@
       "income-categories": widgetShell("income-categories", `<div class="card-header"><div><h3>Income categories</h3><p>Where your income came from</p></div></div><div class="card-body">${renderBars(incomeBreakdown)}</div>`),
       "highlights": widgetShell("highlights", `<div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary"><div class="mini-summary"><label>Highest income month</label><strong>${monthIncome[highestIncomeIndex] ? MONTHS[highestIncomeIndex] : "—"}</strong></div><div class="mini-summary"><label>Highest expense month</label><strong>${monthExpenses[highestExpenseIndex] ? MONTHS[highestExpenseIndex] : "—"}</strong></div><div class="mini-summary"><label>Debt reduction</label><strong class="${annual.debtReduction >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(annual.debtReduction)}</strong></div></div></div>`)
     };
+    const hiddenDashboard = new Set(data.settings.hiddenDashboardWidgets);
+    const hiddenDashboardControls = state.dashboardArrange && hiddenDashboard.size ? `<div class="hidden-box-panel"><div><strong>Hidden dashboard boxes</strong><span>Tap a box to show it again.</span></div><div class="hidden-box-list">${[...hiddenDashboard].map(id => `<button class="ghost-button compact" data-action="show-dashboard-widget" data-widget="${id}">+ ${escapeHtml(DASHBOARD_WIDGET_LABELS[id])}</button>`).join("")}</div></div>` : "";
     return `<div class="page-stack">
       <div class="section-heading"><div><h2>${escapeHtml(data.settings.name)}</h2><p>Your ${data.settings.year} plan at a glance. Every figure updates as you enter monthly data.</p></div><div class="section-actions"><button class="ghost-button" data-action="arrange-dashboard">${state.dashboardArrange ? "Done customizing" : "Customize boxes"}</button>${state.dashboardArrange ? `<button class="ghost-button" data-action="reset-dashboard-layout">Reset dashboard</button>` : ""}<button class="ghost-button" data-action="print">Print dashboard</button><button class="secondary-button" data-view-jump="monthly">Open monthly planner</button></div></div>
       <section class="stats-grid">
@@ -630,7 +637,7 @@
         ${statCard("Net cash flow", formatMoney(net), net >= 0 ? "Income minus expenses" : "Expenses exceed income", net >= 0 ? "var(--gold)" : "var(--rose)", net >= 0 ? "delta-positive" : "delta-negative")}
         ${statCard("Current savings", formatMoney(annual.savings), `${annual.savingsIncrease >= 0 ? "+" : ""}${formatMoney(annual.savingsIncrease)} this year`, "var(--gold)", annual.savingsIncrease >= 0 ? "delta-positive" : "delta-negative")}
       </section>
-      <section class="dashboard-widgets">${data.settings.dashboardOrder.map(id => widgets[id]).join("")}</section>
+      ${hiddenDashboardControls}<section class="dashboard-widgets">${data.settings.dashboardOrder.filter(id => !hiddenDashboard.has(id)).map(id => widgets[id]).join("")}</section>
     </div>`;
   }
 
@@ -975,13 +982,18 @@
     app.classList.toggle("resize-boxes-mode", state.resizeBoxes);
     const cards = [...app.querySelectorAll("article.card:not(.dashboard-widget)")];
     const titleCounts = {};
+    const boxLabels = {};
+    const hiddenKeys = new Set(Array.isArray(data.settings.hiddenBoxes[state.view]) ? data.settings.hiddenBoxes[state.view] : []);
     cards.forEach((card, index) => {
-      const baseTitle = card.querySelector("h3")?.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `box-${index + 1}`;
+      const heading = card.querySelector("h3")?.textContent.trim() || `Box ${index + 1}`;
+      const baseTitle = heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `box-${index + 1}`;
       titleCounts[baseTitle] = (titleCounts[baseTitle] || 0) + 1;
       const title = titleCounts[baseTitle] > 1 ? `${baseTitle}-${titleCounts[baseTitle]}` : baseTitle;
       const key = `${state.view}:${title}`;
+      boxLabels[key] = heading;
       const saved = { width: "standard", height: "normal", font: "standard", ...(data.settings.boxSizes[key] || {}) };
       card.dataset.boxSizeKey = key;
+      card.hidden = hiddenKeys.has(key);
       card.classList.add(`global-width-${saved.width || "standard"}`, `global-height-${saved.height || "normal"}`, `global-font-${saved.font || "standard"}`);
     });
     const savedOrder = Array.isArray(data.settings.boxOrder[state.view]) ? data.settings.boxOrder[state.view] : [];
@@ -992,13 +1004,13 @@
         return (ai < 0 ? 9999 : ai) - (bi < 0 ? 9999 : bi);
       }).forEach(card => parent.appendChild(card));
     });
-    if (state.resizeBoxes && state.view !== "dashboard") app.insertAdjacentHTML("afterbegin", `<div class="layout-customize-banner"><div><strong>Customize ${escapeHtml(VIEW_META[state.view][1])}</strong><span>Resize, change text, drag boxes, or use the arrows on mobile.</span></div><button class="ghost-button compact" data-reset-page-layout>Reset this tab</button></div>`);
+    if (state.resizeBoxes && state.view !== "dashboard") app.insertAdjacentHTML("afterbegin", `<div class="layout-customize-banner"><div><strong>Customize ${escapeHtml(VIEW_META[state.view][1])}</strong><span>Resize, move, hide, or restore boxes. Hidden boxes keep all their data.</span>${hiddenKeys.size ? `<div class="hidden-box-list">${[...hiddenKeys].map(key => `<button class="ghost-button compact" data-show-global-box="${escapeHtml(key)}">+ ${escapeHtml(boxLabels[key] || key.split(":").pop().replace(/-/g," "))}</button>`).join("")}</div>` : ""}</div><button class="ghost-button compact" data-reset-page-layout>Reset this tab</button></div>`);
     cards.forEach(card => {
-      if (!state.resizeBoxes) return;
+      if (!state.resizeBoxes || card.hidden) return;
       const key = card.dataset.boxSizeKey;
       const saved = { width: "standard", height: "normal", font: "standard", ...(data.settings.boxSizes[key] || {}) };
       card.draggable = true;
-      card.insertAdjacentHTML("afterbegin", `<div class="global-box-tools"><span class="global-drag-grip" title="Drag to move">☰</span><label>Width<select data-global-box-size="${escapeHtml(key)}" data-dimension="width"><option value="standard">Standard</option><option value="quarter">25%</option><option value="third">33%</option><option value="half">50%</option><option value="twothirds">67%</option><option value="wide">75%</option><option value="full">100%</option></select></label><label>Height<select data-global-box-size="${escapeHtml(key)}" data-dimension="height"><option value="xcompact">Extra short</option><option value="compact">Short</option><option value="normal">Auto</option><option value="tall">Tall</option><option value="xlarge">Extra tall</option></select></label><label>Text<select data-global-box-size="${escapeHtml(key)}" data-dimension="font"><option value="small">Small</option><option value="standard">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><button class="ghost-button compact" type="button" data-move-global-box="${escapeHtml(key)}" data-offset="-1" aria-label="Move box up">↑</button><button class="ghost-button compact" type="button" data-move-global-box="${escapeHtml(key)}" data-offset="1" aria-label="Move box down">↓</button><button class="ghost-button compact" type="button" data-reset-box-size="${escapeHtml(key)}">Reset</button></div>`);
+      card.insertAdjacentHTML("afterbegin", `<div class="global-box-tools"><span class="global-drag-grip" title="Drag to move">☰</span><label>Width<select data-global-box-size="${escapeHtml(key)}" data-dimension="width"><option value="standard">Standard</option><option value="quarter">25%</option><option value="third">33%</option><option value="half">50%</option><option value="twothirds">67%</option><option value="wide">75%</option><option value="full">100%</option></select></label><label>Height<select data-global-box-size="${escapeHtml(key)}" data-dimension="height"><option value="xcompact">Extra short</option><option value="compact">Short</option><option value="normal">Auto</option><option value="tall">Tall</option><option value="xlarge">Extra tall</option></select></label><label>Text<select data-global-box-size="${escapeHtml(key)}" data-dimension="font"><option value="small">Small</option><option value="standard">Normal</option><option value="large">Large</option><option value="xlarge">Extra large</option></select></label><button class="ghost-button compact" type="button" data-move-global-box="${escapeHtml(key)}" data-offset="-1" aria-label="Move box up">↑</button><button class="ghost-button compact" type="button" data-move-global-box="${escapeHtml(key)}" data-offset="1" aria-label="Move box down">↓</button><button class="ghost-button compact" type="button" data-reset-box-size="${escapeHtml(key)}">Reset</button><button class="ghost-button compact hide-box-button" type="button" data-hide-global-box="${escapeHtml(key)}">Hide</button></div>`);
       card.querySelectorAll("[data-global-box-size]").forEach(select => { select.value = saved[select.dataset.dimension]; });
     });
     const toggle = document.getElementById("toggleResizeBoxes");
@@ -1056,6 +1068,7 @@
     document.body.dataset.visualTheme = data.settings.visualTheme;
     document.body.dataset.cornerStyle = data.settings.cornerStyle;
     document.body.dataset.density = data.settings.density;
+    document.body.dataset.sidebarCollapsed = String(data.settings.sidebarCollapsed);
     document.documentElement.style.setProperty("--mint", data.settings.accentColor);
     document.documentElement.style.setProperty("--user-accent", data.settings.accentColor);
     const renderers = {
@@ -1071,6 +1084,7 @@
     app.innerHTML = renderers[state.view]();
     prepareResizableBoxes();
     bindViewEvents();
+    applySidebarState();
   }
 
   function bindViewEvents() {
@@ -1132,9 +1146,24 @@
       toast("Box size reset");
     }));
     app.querySelectorAll("[data-move-global-box]").forEach(button => button.addEventListener("click", () => moveGlobalBox(button.dataset.moveGlobalBox, number(button.dataset.offset))));
+    app.querySelectorAll("[data-hide-global-box]").forEach(button => button.addEventListener("click", () => {
+      const hidden = new Set(Array.isArray(data.settings.hiddenBoxes[state.view]) ? data.settings.hiddenBoxes[state.view] : []);
+      hidden.add(button.dataset.hideGlobalBox);
+      data.settings.hiddenBoxes[state.view] = [...hidden];
+      saveData();
+      render();
+      toast("Box hidden — restore it from Customize layout");
+    }));
+    app.querySelectorAll("[data-show-global-box]").forEach(button => button.addEventListener("click", () => {
+      data.settings.hiddenBoxes[state.view] = (data.settings.hiddenBoxes[state.view] || []).filter(key => key !== button.dataset.showGlobalBox);
+      saveData();
+      render();
+      toast("Box restored");
+    }));
     app.querySelectorAll("[data-reset-page-layout]").forEach(button => button.addEventListener("click", () => {
       Object.keys(data.settings.boxSizes).filter(key => key.startsWith(`${state.view}:`)).forEach(key => delete data.settings.boxSizes[key]);
       delete data.settings.boxOrder[state.view];
+      delete data.settings.hiddenBoxes[state.view];
       saveData();
       render();
       toast("This tab's layout was reset");
@@ -1317,9 +1346,22 @@
     if (action === "check-all-recurring") setAllRecurring(true);
     if (action === "clear-all-recurring") setAllRecurring(false);
     if (action === "arrange-dashboard") { state.dashboardArrange = !state.dashboardArrange; render(); }
+    if (action === "hide-dashboard-widget") {
+      if (!data.settings.hiddenDashboardWidgets.includes(button.dataset.widget)) data.settings.hiddenDashboardWidgets.push(button.dataset.widget);
+      saveData();
+      render();
+      toast("Dashboard box hidden");
+    }
+    if (action === "show-dashboard-widget") {
+      data.settings.hiddenDashboardWidgets = data.settings.hiddenDashboardWidgets.filter(id => id !== button.dataset.widget);
+      saveData();
+      render();
+      toast("Dashboard box restored");
+    }
     if (action === "reset-dashboard-layout") {
       data.settings.dashboardOrder = [...DEFAULT_DASHBOARD_ORDER];
       data.settings.dashboardSizes = structuredClone(DEFAULT_DASHBOARD_SIZES);
+      data.settings.hiddenDashboardWidgets = [];
       saveData();
       render();
       toast("Dashboard layout reset");
@@ -1707,6 +1749,21 @@
     document.getElementById("mobileScrim").classList.remove("open");
   }
 
+  function applySidebarState() {
+    document.body.dataset.sidebarCollapsed = String(data.settings.sidebarCollapsed);
+    const button = document.getElementById("menuButton");
+    if (!button) return;
+    button.textContent = data.settings.sidebarCollapsed ? "☰" : "‹";
+    button.setAttribute("aria-label", data.settings.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar");
+    button.title = data.settings.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+  }
+
+  function toggleSidebar() {
+    data.settings.sidebarCollapsed = !data.settings.sidebarCollapsed;
+    saveData();
+    applySidebarState();
+  }
+
   function bindNavigation() {
     const nav = document.querySelector(".main-nav");
     document.querySelectorAll(".nav-item[data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -1749,7 +1806,7 @@
   document.getElementById("closeModal").addEventListener("click", closeModal);
   modalBackdrop.addEventListener("click", event => { if (event.target === modalBackdrop) closeModal(); });
   document.addEventListener("keydown", event => { if (event.key === "Escape" && !modalBackdrop.classList.contains("hidden")) closeModal(); });
-  document.getElementById("menuButton").addEventListener("click", openMobileMenu);
+  document.getElementById("menuButton").addEventListener("click", toggleSidebar);
   document.getElementById("mobileScrim").addEventListener("click", closeMobileMenu);
 
   importInput.addEventListener("change", () => {
