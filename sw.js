@@ -1,4 +1,4 @@
-const CACHE = "truebalance-budget-v8";
+const CACHE = "truebalance-budget-v9";
 const FILES = ["./", "./index.html", "./styles.css", "./config.js", "./supabase-client.js", "./app.js", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {
