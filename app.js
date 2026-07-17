@@ -8,6 +8,7 @@
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const SHORT_MONTHS = MONTHS.map(month => month.slice(0, 3));
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
+  const RECURRING_ICONS = ["🧾","🏠","🔑","💡","💧","📱","🌐","🚙","🛡️","🎧","📺","🎮","💪","☁️","🐾","🎓","💳","✨"];
   const CATEGORY_EMOJIS = { housing:"🔑", rent:"🔑", car:"🚙", transportation:"🚙", groceries:"🥑", grocery:"🥑", dining:"🍔", restaurants:"🍔", clothing:"👕", personal:"👕", entertainment:"🎟️", utilities:"🏠", insurance:"🛡️", bills:"🧾", subscriptions:"📱", "zip payments":"💳", other:"✨" };
   const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","zip","calendar","categories"];
   const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","recurring-overview","monthly-spending","income-categories","highlights"];
@@ -133,7 +134,11 @@
       };
     });
     data.recurring = Array.isArray(data.recurring) ? data.recurring : [];
-    data.recurring.forEach(item => { item.paid = item.paid || {}; });
+    data.recurring.forEach(item => {
+      item.paid = item.paid || {};
+      item.icon = String(item.icon || "").slice(0, 12);
+      if (!/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(String(item.image || ""))) item.image = "";
+    });
     data.zipPurchases = Array.isArray(data.zipPurchases) ? data.zipPurchases : [];
     data.zipPurchases.forEach(purchase => {
       purchase.payments = Array.isArray(purchase.payments) ? purchase.payments : [];
@@ -570,6 +575,15 @@
     return `<div class="bar-list">${clean.map(item => `<div class="bar-row"><span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.max(2, item.value / max * 100)}%;background:${color}"></div></div><strong>${escapeHtml(formatMoney(item.value, true))}</strong></div>`).join("")}</div>`;
   }
 
+  function recurringVisual(item, index = 0, className = "recurring-visual") {
+    if (/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(String(item.image || ""))) {
+      return `<span class="${className} has-image"><img src="${escapeHtml(item.image)}" alt="" loading="lazy"></span>`;
+    }
+    const appearance = categoryAppearance(item.name, index);
+    const fallback = appearance.emoji === "•" ? (item.kind === "subscription" ? "🎧" : "🧾") : appearance.emoji;
+    return `<span class="${className}">${escapeHtml(item.icon || fallback)}</span>`;
+  }
+
   function renderDashboardRecurring(monthIndex) {
     const items = [...data.recurring].sort((a,b) => number(a.dueDay)-number(b.dueDay));
     const total = items.reduce((sum,item) => sum + number(item.amount),0);
@@ -579,7 +593,7 @@
     const itemCards = items.map((item,index) => {
       const appearance = categoryAppearance(item.name,index);
       const checked = Boolean(item.paid && item.paid[monthIndex]);
-      return `<label class="dashboard-recurring-item ${checked ? "paid" : ""}" style="--recurring-color:${appearance.color}"><input type="checkbox" data-dashboard-recurring-check="${escapeHtml(item.id)}" data-month="${monthIndex}" ${checked ? "checked" : ""}><span class="dashboard-recurring-emoji">${escapeHtml(appearance.emoji === "•" ? (item.kind === "subscription" ? "🎧" : "🧾") : appearance.emoji)}</span><strong>${escapeHtml(item.name)}</strong><small>${formatMoney(item.amount)} · ${number(item.dueDay)}${number(item.dueDay) % 10 === 1 && number(item.dueDay) !== 11 ? "st" : number(item.dueDay) % 10 === 2 && number(item.dueDay) !== 12 ? "nd" : number(item.dueDay) % 10 === 3 && number(item.dueDay) !== 13 ? "rd" : "th"}</small><em>${checked ? "✓" : ""}</em></label>`;
+      return `<label class="dashboard-recurring-item ${checked ? "paid" : ""}" style="--recurring-color:${appearance.color}"><input type="checkbox" data-dashboard-recurring-check="${escapeHtml(item.id)}" data-month="${monthIndex}" ${checked ? "checked" : ""}>${recurringVisual(item,index,"dashboard-recurring-emoji")}<strong>${escapeHtml(item.name)}</strong><small>${formatMoney(item.amount)} · ${number(item.dueDay)}${number(item.dueDay) % 10 === 1 && number(item.dueDay) !== 11 ? "st" : number(item.dueDay) % 10 === 2 && number(item.dueDay) !== 12 ? "nd" : number(item.dueDay) % 10 === 3 && number(item.dueDay) !== 13 ? "rd" : "th"}</small><em>${checked ? "✓" : ""}</em></label>`;
     }).join("");
     return `<div class="dashboard-recurring-body"><div class="dashboard-recurring-summary"><div><strong>${formatMoney(left)}</strong><span>left to pay</span></div><div class="recurring-progress-ring" style="--progress:${progress}%"><i></i></div><div><strong>${formatMoney(paid)}</strong><span>paid so far</span></div></div><div class="dashboard-recurring-label">THIS MONTH</div><div class="dashboard-recurring-grid">${itemCards}<button class="dashboard-recurring-add" data-action="add-recurring" aria-label="Add recurring payment"><span>+</span><small>Add payment</small></button></div>${items.length ? `<div class="dashboard-recurring-footer"><span>${items.filter(item => item.paid && item.paid[monthIndex]).length} of ${items.length} payments complete</span><button class="ghost-button compact" data-view-jump="recurring">View all payments</button></div>` : `<div class="empty-state"><div><strong>No recurring payments yet</strong><p>Add a bill or subscription here and it will connect to every budget total.</p></div></div>`}</div>`;
   }
@@ -808,7 +822,7 @@
   function recurringTable(kind) {
     const items = data.recurring.filter(item => item.kind === kind);
     if (!items.length) return `<div class="empty-state"><div><strong>No ${kind === "bill" ? "bills" : "subscriptions"} added</strong><p>Add a recurring payment and track it across all twelve months.</p><button class="primary-button compact" data-action="add-recurring" data-kind="${kind}">Add ${kind}</button></div></div>`;
-    return `<table class="data-table"><thead><tr><th class="recurring-name">Name</th><th class="numeric">Amount</th><th class="numeric">Due</th>${SHORT_MONTHS.map(month => `<th class="month-check-cell">${month}</th>`).join("")}<th></th></tr></thead><tbody>${items.map(item => `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td class="numeric">${formatMoney(item.amount)}</td><td class="numeric">${number(item.dueDay)}</td>${MONTHS.map((_,index) => `<td class="month-check-cell"><input class="month-check" type="checkbox" aria-label="${escapeHtml(item.name)} paid in ${MONTHS[index]}" data-recurring-check="${escapeHtml(item.id)}" data-month="${index}" ${item.paid && item.paid[index] ? "checked" : ""}></td>`).join("")}<td class="actions"><button class="delete-icon" data-action="delete-recurring" data-id="${escapeHtml(item.id)}" title="Delete">×</button></td></tr>`).join("")}</tbody></table>`;
+    return `<table class="data-table recurring-table"><thead><tr><th>Image</th><th class="recurring-name">Name</th><th class="numeric">Amount</th><th class="numeric">Due</th>${SHORT_MONTHS.map(month => `<th class="month-check-cell">${month}</th>`).join("")}<th></th></tr></thead><tbody>${items.map((item,itemIndex) => `<tr><td><button class="recurring-icon-button" data-action="edit-recurring" data-id="${escapeHtml(item.id)}" title="Change image for ${escapeHtml(item.name)}">${recurringVisual(item,itemIndex)}</button></td><td><strong>${escapeHtml(item.name)}</strong></td><td class="numeric">${formatMoney(item.amount)}</td><td class="numeric">${number(item.dueDay)}</td>${MONTHS.map((_,index) => `<td class="month-check-cell"><input class="month-check" type="checkbox" aria-label="${escapeHtml(item.name)} paid in ${MONTHS[index]}" data-recurring-check="${escapeHtml(item.id)}" data-month="${index}" ${item.paid && item.paid[index] ? "checked" : ""}></td>`).join("")}<td class="actions"><button class="edit-icon" data-action="edit-recurring" data-id="${escapeHtml(item.id)}" title="Edit">✎</button><button class="delete-icon" data-action="delete-recurring" data-id="${escapeHtml(item.id)}" title="Delete">×</button></td></tr>`).join("")}</tbody></table>`;
   }
 
   function renderRecurring() {
@@ -1278,6 +1292,7 @@
     if (action === "edit-transaction") openEditTransactionModal(button.dataset.id, number(button.dataset.month));
     if (action === "add-income") openIncomeModal(state.month);
     if (action === "add-recurring") openRecurringModal(button.dataset.kind);
+    if (action === "edit-recurring") openRecurringModal(undefined, button.dataset.id);
     if (action === "add-zip") openZipModal();
     if (action === "delete-transaction") deleteTransaction(button.dataset.id, number(button.dataset.month));
     if (action === "delete-income") deleteIncome(button.dataset.id, number(button.dataset.month));
@@ -1524,19 +1539,87 @@
     modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
   }
 
-  function openRecurringModal(defaultKind) {
-    const kind = defaultKind || "bill";
-    openModal("Add recurring payment", "BILL OR SUBSCRIPTION", `<div class="form-grid">
+  function imageFileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !String(file.type).startsWith("image/")) return reject(new Error("Choose an image file"));
+      if (file.size > 8 * 1024 * 1024) return reject(new Error("Choose an image smaller than 8 MB"));
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("That image could not be read"));
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = () => reject(new Error("That image format is not supported"));
+        image.onload = () => {
+          const size = 180;
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const context = canvas.getContext("2d");
+          if (!context) return reject(new Error("Image editing is unavailable in this browser"));
+          const scale = Math.max(size / image.width, size / image.height);
+          const width = image.width * scale;
+          const height = image.height * scale;
+          context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+          resolve(canvas.toDataURL("image/jpeg", .84));
+        };
+        image.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function openRecurringModal(defaultKind, editId) {
+    const existing = editId ? data.recurring.find(item => item.id === editId) : null;
+    if (editId && !existing) { toast("That payment could not be found"); return; }
+    const kind = existing ? existing.kind : (defaultKind || "bill");
+    const icon = existing && existing.icon || (kind === "subscription" ? "🎧" : "🧾");
+    const image = existing && existing.image || "";
+    const preview = existing ? recurringVisual(existing,0,"recurring-image-preview") : `<span class="recurring-image-preview">${icon}</span>`;
+    openModal(existing ? "Edit recurring payment" : "Add recurring payment", "BILL OR SUBSCRIPTION", `<div class="recurring-image-editor"><div id="recurringImagePreview">${preview}</div><div><strong>Payment image</strong><p>Choose an icon or upload a photo/logo from this device.</p></div></div><div class="form-grid">
+      <div class="field"><label>Icon</label><select name="icon" id="recurringIconSelect">${RECURRING_ICONS.map(choice => `<option value="${choice}" ${choice===icon ? "selected" : ""}>${choice} ${choice === "🧾" ? "Bill" : choice === "🎧" ? "Subscription" : ""}</option>`).join("")}</select></div>
+      <div class="field"><label>Custom image</label><input name="imageFile" id="recurringImageFile" type="file" accept="image/*"></div>
+      <input name="imageData" id="recurringImageData" type="hidden" value="${escapeHtml(image)}">
+      <div class="field span-2"><button type="button" class="ghost-button compact" id="removeRecurringImage" ${image ? "" : "disabled"}>Remove uploaded image</button></div>
       <div class="field"><label>Type</label><select name="kind"><option value="bill" ${kind==="bill" ? "selected" : ""}>Bill</option><option value="subscription" ${kind==="subscription" ? "selected" : ""}>Subscription</option></select></div>
-      <div class="field"><label>Due day</label><input name="dueDay" type="number" min="1" max="31" value="1" required></div>
-      <div class="field span-2"><label>Name</label><input name="name" maxlength="70" placeholder="Rent, phone, streaming..." required></div>
-      <div class="field span-2"><label>Monthly amount</label><input name="amount" type="number" min="0" step="0.01" placeholder="0.00" required></div>
-    </div><div class="modal-actions"><button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">Add payment</button></div>`, form => {
-      data.recurring.push({ id: makeId(), kind: String(form.get("kind")), name: String(form.get("name") || "").trim(), amount: Math.max(0, number(form.get("amount"))), dueDay: Math.min(31, Math.max(1, number(form.get("dueDay")))), paid: {} });
+      <div class="field"><label>Due day</label><input name="dueDay" type="number" min="1" max="31" value="${existing ? number(existing.dueDay) : 1}" required></div>
+      <div class="field span-2"><label>Name</label><input name="name" maxlength="70" value="${escapeHtml(existing && existing.name || "")}" placeholder="Rent, phone, streaming..." required></div>
+      <div class="field span-2"><label>Monthly amount</label><input name="amount" type="number" min="0" step="0.01" value="${existing ? number(existing.amount) : ""}" placeholder="0.00" required></div>
+    </div><div class="modal-actions"><button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">${existing ? "Save changes" : "Add payment"}</button></div>`, form => {
+      const updated = {
+        id: existing ? existing.id : makeId(),
+        kind: String(form.get("kind")),
+        name: String(form.get("name") || "").trim(),
+        amount: Math.max(0, number(form.get("amount"))),
+        dueDay: Math.min(31, Math.max(1, number(form.get("dueDay")))),
+        icon: String(form.get("icon") || "").slice(0,12),
+        image: /^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(String(form.get("imageData") || "")) ? String(form.get("imageData")) : "",
+        paid: existing ? existing.paid : {}
+      };
+      if (existing) Object.assign(existing, updated);
+      else data.recurring.push(updated);
       saveData();
       closeModal();
       render();
-      toast("Recurring payment added");
+      toast(existing ? "Recurring payment updated" : "Recurring payment added");
+    });
+    const previewBox = modalForm.querySelector("#recurringImagePreview");
+    const imageData = modalForm.querySelector("#recurringImageData");
+    const imageInput = modalForm.querySelector("#recurringImageFile");
+    const iconSelect = modalForm.querySelector("#recurringIconSelect");
+    const removeImage = modalForm.querySelector("#removeRecurringImage");
+    iconSelect.addEventListener("change", () => { if (!imageData.value) previewBox.innerHTML = `<span class="recurring-image-preview">${escapeHtml(iconSelect.value)}</span>`; });
+    imageInput.addEventListener("change", async () => {
+      try {
+        const converted = await imageFileToDataUrl(imageInput.files && imageInput.files[0]);
+        imageData.value = converted;
+        previewBox.innerHTML = `<span class="recurring-image-preview has-image"><img src="${converted}" alt=""></span>`;
+        removeImage.disabled = false;
+      } catch (error) { imageInput.value = ""; toast(error.message); }
+    });
+    removeImage.addEventListener("click", () => {
+      imageData.value = "";
+      imageInput.value = "";
+      removeImage.disabled = true;
+      previewBox.innerHTML = `<span class="recurring-image-preview">${escapeHtml(iconSelect.value)}</span>`;
     });
     modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
   }
