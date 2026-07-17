@@ -44,6 +44,7 @@
   let realtimeChannel = null;
   let realtimeStatus = "offline";
   let applyingRemoteCloud = false;
+  let cloudShareCode = "";
 
   const makeId = () => (globalThis.crypto && crypto.randomUUID)
     ? crypto.randomUUID()
@@ -159,6 +160,14 @@
     return /^https:\/\/.+\.supabase\.co$/i.test(String(CLOUD_CONFIG.url || "")) && String(CLOUD_CONFIG.anonKey || "").length > 40;
   }
 
+  function cloudBudgetUserId() {
+    return cloudSession && (cloudSession.budget_user_id || cloudSession.user.id);
+  }
+
+  function usingSharedBudget() {
+    return Boolean(cloudSession && cloudSession.budget_user_id && cloudSession.budget_user_id !== cloudSession.user.id);
+  }
+
   function loadCloudSession() {
     try { return JSON.parse(localStorage.getItem(CLOUD_SESSION_KEY) || "null"); } catch { return null; }
   }
@@ -201,8 +210,9 @@
     realtimeClient = client;
     await client.realtime.setAuth(cloudSession.access_token);
     if (realtimeClient !== client || !cloudSession) return;
-    realtimeChannel = client.channel(`truebalance-${cloudSession.user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "budgets", filter: `user_id=eq.${cloudSession.user.id}` }, payload => {
+    const budgetUserId = cloudBudgetUserId();
+    realtimeChannel = client.channel(`truebalance-${budgetUserId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "budgets", filter: `user_id=eq.${budgetUserId}` }, payload => {
         if (payload.eventType !== "DELETE" && payload.new && payload.new.data) applyCloudData(payload.new.data);
       })
       .subscribe(status => {
@@ -237,7 +247,11 @@
     if (!await refreshCloudSession()) return;
     cloudBusy = true;
     try {
-      await cloudRequest("/rest/v1/budgets?on_conflict=user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: cloudSession.user.id, data }) });
+      if (usingSharedBudget()) {
+        await cloudRequest(`/rest/v1/budgets?user_id=eq.${encodeURIComponent(cloudBudgetUserId())}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ data }) });
+      } else {
+        await cloudRequest("/rest/v1/budgets?on_conflict=user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: cloudSession.user.id, data }) });
+      }
       if (!silent) toast("Budget synced to cloud");
     } catch (error) { if (!silent) toast(error.message); }
     finally { cloudBusy = false; }
@@ -250,7 +264,8 @@
 
   async function getCloudBudget() {
     if (!cloudSession || !await refreshCloudSession()) throw new Error("Please sign in again");
-    const rows = await cloudRequest(`/rest/v1/budgets?user_id=eq.${encodeURIComponent(cloudSession.user.id)}&select=data,updated_at&limit=1`);
+    const rows = await cloudRequest(`/rest/v1/budgets?user_id=eq.${encodeURIComponent(cloudBudgetUserId())}&select=user_id,data,updated_at,share_code&limit=1`);
+    cloudShareCode = rows && rows.length ? String(rows[0].share_code || "") : "";
     return rows && rows.length ? rows[0] : null;
   }
 
@@ -275,6 +290,12 @@
 
   async function reconcileCloud() {
     if (!cloudSession || !cloudConfigured()) return;
+    if (!cloudSession.budget_user_id) {
+      try {
+        const memberships = await cloudRequest(`/rest/v1/budget_members?member_id=eq.${encodeURIComponent(cloudSession.user.id)}&select=budget_user_id&limit=1`);
+        if (memberships && memberships.length) storeCloudSession({ ...cloudSession, budget_user_id: memberships[0].budget_user_id });
+      } catch { /* sharing schema may not be installed yet */ }
+    }
     const row = await getCloudBudget();
     if (!row) { await uploadCloud(true); return; }
     const cloudTime = Date.parse(row.data && row.data.meta && row.data.meta.localUpdatedAt || row.updated_at || 0);
@@ -287,6 +308,43 @@
     const path = createAccount ? "/auth/v1/signup" : "/auth/v1/token?grant_type=password";
     const session = await cloudRequest(path, { method: "POST", auth: false, body: JSON.stringify({ email, password }) });
     if (createAccount && !session.access_token) throw new Error("Check your email to confirm your account, then sign in");
+    storeCloudSession(session);
+    await reconcileCloud();
+  }
+
+  function createShareCodeValue() {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const bytes = new Uint8Array(12);
+    crypto.getRandomValues(bytes);
+    return [...bytes].map(value => alphabet[value % alphabet.length]).join("");
+  }
+
+  async function createCloudShareCode() {
+    if (!cloudSession || usingSharedBudget()) throw new Error("Only the budget owner can create a sharing code");
+    if (!await getCloudBudget()) await uploadCloud(true);
+    const code = createShareCodeValue();
+    await cloudRequest(`/rest/v1/budgets?user_id=eq.${encodeURIComponent(cloudSession.user.id)}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ share_code: code }) });
+    cloudShareCode = code;
+    render();
+    return code;
+  }
+
+  async function joinCloudBudget(code) {
+    if (!cloudSession) throw new Error("Sign in before joining a shared budget");
+    const ownerId = await cloudRequest("/rest/v1/rpc/join_shared_budget", { method: "POST", body: JSON.stringify({ p_share_code: String(code || "").trim().toUpperCase() }) });
+    if (!ownerId) throw new Error("That sharing code was not found");
+    storeCloudSession({ ...cloudSession, budget_user_id: String(ownerId) });
+    await downloadCloud();
+    startRealtimeSync();
+  }
+
+  async function leaveCloudBudget() {
+    if (!usingSharedBudget()) return;
+    const ownerId = cloudBudgetUserId();
+    await cloudRequest(`/rest/v1/budget_members?budget_user_id=eq.${encodeURIComponent(ownerId)}&member_id=eq.${encodeURIComponent(cloudSession.user.id)}`, { method: "DELETE" });
+    const session = { ...cloudSession };
+    delete session.budget_user_id;
+    cloudShareCode = "";
     storeCloudSession(session);
     await reconcileCloud();
   }
@@ -799,12 +857,14 @@
     const cloudReady = cloudConfigured();
     const cloudEmail = cloudSession && cloudSession.user ? cloudSession.user.email : "";
     const hasRecoveryCopy = Boolean(localStorage.getItem("truebalance-recovery-backup-v1"));
+    const shareCard = `<article class="card share-card"><div class="card-header"><div><h3>Share account</h3><p>Give another member full access to this budget</p></div><span class="status-badge ${usingSharedBudget() ? "paid" : "due"}">${usingSharedBudget() ? "Shared member" : "Owner"}</span></div><div class="card-body">${!cloudSession ? `<div class="info-callout">Connect Cloud Sync first. Every member uses their own email and password.</div>` : usingSharedBudget() ? `<div class="cloud-account"><div><span>Current budget</span><strong>Shared household budget</strong><small class="settings-hint">You have full editing access and your changes sync to every member.</small></div><button class="ghost-button" data-action="leave-shared-budget">Leave shared budget</button></div>` : `<div class="cloud-account"><div><span>Your private sharing code</span>${cloudShareCode ? `<div class="share-code-row"><strong class="share-code">${escapeHtml(cloudShareCode)}</strong><button class="secondary-button compact" data-action="copy-share-code">Copy</button><button class="ghost-button compact" data-action="create-share-code">New code</button></div><small class="settings-hint">Send this code only to the person you trust. A new code disables the previous invitation.</small>` : `<button class="secondary-button" data-action="create-share-code">Create sharing code</button>`}</div><div class="share-divider"><span>OR JOIN ANOTHER BUDGET</span></div><form id="joinBudgetForm" class="form-grid"><div class="field span-2"><label for="shareCodeInput">Invitation code</label><input id="shareCodeInput" name="shareCode" maxlength="20" autocomplete="off" placeholder="Enter the member code" required></div><div class="field span-2"><button class="primary-button">Join shared budget</button></div></form></div>`}</div></article>`;
     return `<div class="page-stack">
       <div class="section-heading"><div><h2>Planner settings</h2><p>Choose your year and currency, then back up or move your budget whenever you want.</p></div></div>
       <section class="settings-grid">
         <article class="card"><div class="card-header"><div><h3>General</h3><p>Used across the entire planner</p></div></div><form class="card-body form-grid" id="settingsForm"><div class="field span-2"><label for="budgetName">Budget name</label><input id="budgetName" name="name" value="${escapeHtml(data.settings.name)}" maxlength="60"></div><div class="field"><label for="planYear">Plan year</label><input id="planYear" name="year" type="number" min="2000" max="2100" value="${number(data.settings.year)}"></div><div class="field"><label for="currencySelect">Currency</label><select id="currencySelect" name="currency">${["USD","CAD","EUR","GBP","AUD","MXN","JPY","INR"].map(code => `<option ${data.settings.currency===code ? "selected" : ""}>${code}</option>`).join("")}</select></div><div class="field span-2"><label for="fontSizeSelect">App font size</label><select id="fontSizeSelect" name="fontSize">${[["small","Small"],["standard","Standard"],["large","Large"],["xlarge","Extra large"]].map(([value,label]) => `<option value="${value}" ${data.settings.fontSize===value ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field span-2"><button class="primary-button">Save settings</button></div></form></article>
         <article class="card"><div class="card-header"><div><h3>Backup & restore</h3><p>Keep a portable copy of your planner</p></div></div><div class="card-body page-stack" style="gap:14px"><div class="info-callout">TrueBalance always keeps a local device copy. Export a backup before clearing browser data or replacing a device.</div><div class="settings-actions"><button class="secondary-button" data-action="export-json">Export backup</button><button class="ghost-button" data-action="import-json">Import backup</button><button class="ghost-button" data-action="export-csv">Export transactions CSV</button></div></div></article>
         <article class="card cloud-card"><div class="card-header"><div><h3>Cloud sync</h3><p>Use the same budget on all your devices</p></div><span class="status-badge ${cloudSession ? "paid" : "due"}">${cloudSession ? "Connected" : "Not connected"}</span></div><div class="card-body">${!cloudReady ? `<div class="info-callout">Cloud sync is ready to connect, but your Supabase project details still need to be added to <strong>config.js</strong>. Follow SUPABASE-SETUP.md.</div>` : cloudSession ? `<div class="cloud-account"><div><span>Signed in as</span><strong>${escapeHtml(cloudEmail)}</strong><small id="cloudRealtimeStatus" class="cloud-live-status">${realtimeStatus === "live" ? "Live on this device" : "Connecting…"}</small></div><div class="info-callout">Live sync sends saved changes to your other open devices automatically. Downloading a cloud copy first creates a recovery copy on this device.</div><div class="settings-actions"><button class="secondary-button" data-action="sync-cloud">Sync now</button><button class="ghost-button" data-action="download-cloud">Download cloud copy</button>${hasRecoveryCopy ? `<button class="ghost-button" data-action="restore-recovery">Restore last local copy</button>` : ""}<button class="ghost-button" data-action="sign-out-cloud">Sign out</button></div></div>` : `<form id="cloudAuthForm" class="form-grid"><div class="field span-2"><label for="cloudEmail">Email</label><input id="cloudEmail" name="email" type="email" autocomplete="email" required></div><div class="field span-2"><label for="cloudPassword">Password</label><input id="cloudPassword" name="password" type="password" minlength="6" autocomplete="current-password" required></div><div class="field span-2 settings-actions"><button class="primary-button" name="mode" value="signin">Sign in</button><button class="secondary-button" name="mode" value="signup">Create account</button></div></form>`}</div></article>
+        ${shareCard}
         <article class="card"><div class="card-header"><div><h3>Tab order</h3><p>Arrange the sidebar to fit your routine</p></div></div><div class="card-body"><div class="tab-order-list">${data.settings.tabOrder.map((tab,index) => `<div class="tab-order-row"><span class="tab-order-grip" aria-hidden="true">☰</span><span>${escapeHtml(VIEW_META[tab][1])}</span><div class="tab-order-actions"><button class="ghost-button compact" data-action="move-tab-up" data-tab="${tab}" ${index === 0 ? "disabled" : ""} aria-label="Move ${escapeHtml(VIEW_META[tab][1])} up">↑</button><button class="ghost-button compact" data-action="move-tab-down" data-tab="${tab}" ${index === data.settings.tabOrder.length-1 ? "disabled" : ""} aria-label="Move ${escapeHtml(VIEW_META[tab][1])} down">↓</button></div></div>`).join("")}</div><p class="settings-hint">On a computer, you can also drag tabs directly in the sidebar. Your order saves automatically.</p></div></article>
         <article class="card"><div class="card-header"><div><h3>Print</h3><p>Create a paper or PDF copy</p></div></div><div class="card-body"><p style="color:var(--muted);font-size:10px;line-height:1.6">Open the Annual Dashboard first, then use the print button to save a clean annual summary as a PDF.</p><button class="secondary-button" data-view-jump="dashboard">Open dashboard</button></div></article>
         <article class="card" style="border-color:rgba(255,112,133,.18)"><div class="card-header"><div><h3>Start over</h3><p>Permanently clear the planner in this browser</p></div></div><div class="card-body"><p style="color:var(--muted);font-size:10px;line-height:1.6">Export a backup first if you may need this information again.</p><button class="danger-button" data-action="reset-data">Reset all data</button></div></article>
@@ -1036,6 +1096,15 @@
         toast("Cloud account connected");
       } catch (error) { toast(error.message); }
     });
+    const joinBudgetForm = document.getElementById("joinBudgetForm");
+    if (joinBudgetForm) joinBudgetForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      try {
+        await joinCloudBudget(new FormData(joinBudgetForm).get("shareCode"));
+        render();
+        toast("Shared budget connected");
+      } catch (error) { toast(error.message); }
+    });
   }
 
   function handleAction(button) {
@@ -1060,6 +1129,9 @@
     if (action === "sync-cloud") uploadCloud();
     if (action === "download-cloud") downloadCloud().then(found => toast(found ? "Cloud budget downloaded" : "No cloud budget found")).catch(error => toast(error.message));
     if (action === "restore-recovery") restoreRecoveryCopy();
+    if (action === "create-share-code") createCloudShareCode().then(code => toast(`Sharing code ${code} is ready`)).catch(error => toast(error.message));
+    if (action === "copy-share-code") navigator.clipboard.writeText(cloudShareCode).then(() => toast("Sharing code copied")).catch(() => toast("Copy the code shown on screen"));
+    if (action === "leave-shared-budget" && confirm("Leave this shared budget and return to your personal budget?")) leaveCloudBudget().then(() => { render(); toast("Shared budget left"); }).catch(error => toast(error.message));
     if (action === "sign-out-cloud") { storeCloudSession(null); render(); toast("Signed out"); }
     if (action === "print") window.print();
     if (action === "check-all-recurring") setAllRecurring(true);
