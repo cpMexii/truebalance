@@ -15,6 +15,9 @@ You can also double-click `index.html` yourself.
 - Rearrangeable Dashboard boxes with desktop drag-and-drop and mobile Up/Down controls
 - Resizable Dashboard boxes with saved width and height controls
 - Saved width and height resizing for boxes throughout every app tab
+- Advanced per-box customization with 25%, 33%, 50%, 67%, 75%, full, and original width choices
+- Five height choices and four independent text sizes for every customizable box
+- Saved box ordering with desktop drag-and-drop, mobile arrows, per-tab reset, and Dashboard reset
 - Small, standard, large, and extra-large app font settings
 - Separate monthly planners for January through December
 - Custom income, expense, debt, and savings categories
