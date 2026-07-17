@@ -3,8 +3,8 @@
   "short_name": "TrueBalance",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#080d1e",
-  "theme_color": "#0b1025",
+  "background_color": "#020912",
+  "theme_color": "#020912",
   "description": "Private annual and monthly budget planning.",
   "icons": [{"src":"favicon.svg","sizes":"any","type":"image/svg+xml"}]
 }
