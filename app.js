@@ -8,6 +8,7 @@
   const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const SHORT_MONTHS = MONTHS.map(month => month.slice(0, 3));
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
+  const CATEGORY_EMOJIS = { housing:"🔑", rent:"🔑", car:"🚙", transportation:"🚙", groceries:"🥑", grocery:"🥑", dining:"🍔", restaurants:"🍔", clothing:"👕", personal:"👕", entertainment:"🎟️", utilities:"🏠", insurance:"🛡️", bills:"🧾", subscriptions:"📱", "zip payments":"💳", other:"✨" };
   const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","zip","calendar","categories"];
   const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","monthly-spending","income-categories","highlights"];
   const DEFAULT_DASHBOARD_SIZES = {
@@ -58,7 +59,7 @@
     const year = new Date().getFullYear();
     return {
       version: 2,
-      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {}, boxOrder: {} },
+      settings: { year, currency: "USD", name: "My budget", fontSize: "standard", visualTheme: "classic", accentColor: "#79e7bc", cornerStyle: "rounded", density: "comfortable", categoryStyle: "pills", categoryAppearance: {}, tabOrder: [...DEFAULT_TAB_ORDER], dashboardOrder: [...DEFAULT_DASHBOARD_ORDER], dashboardSizes: structuredClone(DEFAULT_DASHBOARD_SIZES), boxSizes: {}, boxOrder: {} },
       categories: {
         income: ["Paycheck", "Side income"],
         expense: ["Housing", "Utilities", "Groceries", "Transportation", "Insurance", "Dining", "Entertainment", "Personal", "Other"],
@@ -93,6 +94,12 @@
       };
     });
     if (!["small","standard","large","xlarge"].includes(data.settings.fontSize)) data.settings.fontSize = "standard";
+    if (!["classic","midnight","black"].includes(data.settings.visualTheme)) data.settings.visualTheme = "classic";
+    if (!/^#[0-9a-f]{6}$/i.test(String(data.settings.accentColor || ""))) data.settings.accentColor = "#79e7bc";
+    if (!["rounded","soft","square"].includes(data.settings.cornerStyle)) data.settings.cornerStyle = "rounded";
+    if (!["comfortable","compact"].includes(data.settings.density)) data.settings.density = "comfortable";
+    if (!["pills","simple"].includes(data.settings.categoryStyle)) data.settings.categoryStyle = "pills";
+    if (!data.settings.categoryAppearance || typeof data.settings.categoryAppearance !== "object" || Array.isArray(data.settings.categoryAppearance)) data.settings.categoryAppearance = {};
     if (!data.settings.boxSizes || typeof data.settings.boxSizes !== "object" || Array.isArray(data.settings.boxSizes)) data.settings.boxSizes = {};
     if (!data.settings.boxOrder || typeof data.settings.boxOrder !== "object" || Array.isArray(data.settings.boxOrder)) data.settings.boxOrder = {};
     data.categories = { ...base.categories, ...(data.categories || {}) };
@@ -589,16 +596,32 @@
     </div>`;
   }
 
+  function categoryAppearance(category, index = 0) {
+    const saved = data.settings.categoryAppearance[category] || {};
+    const lookup = String(category).toLowerCase();
+    const emojiKey = Object.keys(CATEGORY_EMOJIS).find(key => lookup.includes(key));
+    return {
+      color: /^#[0-9a-f]{6}$/i.test(String(saved.color || "")) ? saved.color : COLORS[index % COLORS.length],
+      emoji: String(saved.emoji || (emojiKey ? CATEGORY_EMOJIS[emojiKey] : "•")).slice(0, 4)
+    };
+  }
+
+  function categoryLabel(category, index = 0) {
+    const appearance = categoryAppearance(category, index);
+    if (data.settings.categoryStyle === "simple") return `<span class="category-simple-label"><i style="background:${appearance.color}"></i>${escapeHtml(appearance.emoji)} ${escapeHtml(category)}</span>`;
+    return `<span class="budget-category-pill" style="--category-color:${appearance.color}"><i></i><b>${escapeHtml(appearance.emoji)}</b><span>${escapeHtml(category)}</span></span>`;
+  }
+
   function moneyTableRows(type, monthIndex) {
     const month = monthData(monthIndex);
     const categories = data.categories[type];
     const mapName = type === "expense" ? "budgets" : type;
     if (type === "expense") {
       const rows = [...categories, "Bills", "Subscriptions", "ZIP payments"];
-      return rows.map(category => {
+      return rows.map((category,index) => {
         const key = category.toUpperCase();
         const spent = key === "BILLS" ? recurringPaidForMonth(monthIndex, "bill") : key === "SUBSCRIPTIONS" ? recurringPaidForMonth(monthIndex, "subscription") : key === "ZIP PAYMENTS" ? zipPaidForMonth(monthIndex) : transactionTotal(monthIndex, category);
-        return `<tr><td>${escapeHtml(category)}</td><td class="numeric"><input class="table-input" type="number" min="0" step="0.01" value="${number(month.budgets[category]) || ""}" placeholder="0" data-month-map="budgets" data-category="${escapeHtml(category)}"></td><td class="numeric">${escapeHtml(formatMoney(spent))}</td></tr>`;
+        return `<tr><td>${categoryLabel(category,index)}</td><td class="numeric"><input class="table-input" type="number" min="0" step="0.01" value="${number(month.budgets[category]) || ""}" placeholder="0" data-month-map="budgets" data-category="${escapeHtml(category)}"></td><td class="numeric">${escapeHtml(formatMoney(spent))}</td></tr>`;
       }).join("") + (weeklyBudgetTotal(monthIndex) ? `<tr><td>Weekly plans</td><td class="numeric">${escapeHtml(formatMoney(weeklyBudgetTotal(monthIndex)))}</td><td class="numeric">Included above</td></tr>` : "") + `<tr class="total-row"><td>Total</td><td class="numeric">${escapeHtml(formatMoney(monthTotals(monthIndex).budget))}</td><td class="numeric">${escapeHtml(formatMoney(monthTotals(monthIndex).expenses))}</td></tr>`;
     }
     const rows = categories.map(category => `<tr><td>${escapeHtml(category)}</td><td class="numeric"><input class="table-input" type="number" min="0" step="0.01" value="${number(month[mapName][category]) || ""}" placeholder="0" data-month-map="${mapName}" data-category="${escapeHtml(category)}"></td></tr>`).join("");
@@ -703,7 +726,7 @@
     const categories = [...data.categories.expense, "Bills", "Subscriptions", "ZIP payments"];
     const monthSummary = monthTotals(monthIndex);
     const weekTabs = Array.from({ length: 5 }, (_, index) => { const dates = weekRange(monthIndex,index); return `<button class="month-chip ${weekIndex===index ? "active" : ""}" data-select-week="${index}">Week ${index+1} · ${SHORT_MONTHS[monthIndex]} ${dates.start}–${dates.end}</button>`; }).join("");
-    const budgetRows = categories.map(category => { const budget = number(month.weeklyBudgets[weekIndex][category]); const spent = weeklyCategorySpent(monthIndex,weekIndex,category); return `<tr><td>${escapeHtml(category)}</td><td class="numeric"><input class="table-input" type="number" min="0" step="0.01" value="${budget || ""}" placeholder="0" data-week-budget="${escapeHtml(category)}"></td><td class="numeric">${formatMoney(spent)}</td><td class="numeric ${budget-spent >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(budget-spent)}</td></tr>`; }).join("");
+    const budgetRows = categories.map((category,index) => { const budget = number(month.weeklyBudgets[weekIndex][category]); const spent = weeklyCategorySpent(monthIndex,weekIndex,category); return `<tr><td>${categoryLabel(category,index)}</td><td class="numeric"><input class="table-input" type="number" min="0" step="0.01" value="${budget || ""}" placeholder="0" data-week-budget="${escapeHtml(category)}"></td><td class="numeric">${formatMoney(spent)}</td><td class="numeric ${budget-spent >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(budget-spent)}</td></tr>`; }).join("");
     const incomeItems = month.incomeEntries.filter(item => number(item.day) >= range.start && number(item.day) <= range.end).sort((a,b)=>number(a.day)-number(b.day));
     return `<div class="page-stack">
       <div class="section-heading"><div><h2>${MONTHS[monthIndex]} weekly plan</h2><p>Each paycheck and expense automatically rolls into ${MONTHS[monthIndex]} and the annual dashboard.</p></div><div class="section-actions"><select id="weeklyMonthSelect">${MONTHS.map((name,index)=>`<option value="${index}" ${index===monthIndex ? "selected" : ""}>${name}</option>`).join("")}</select><button class="primary-button" data-action="add-income">+ Add paycheck</button></div></div>
@@ -848,11 +871,11 @@
 
   function renderCategoryCard(type, description, color) {
     const categories = data.categories[type];
-    return `<article class="card category-card" style="border-top:2px solid ${color}"><div class="card-header"><div><h3>${titleCase(type)}</h3><p>${escapeHtml(description)}</p></div><span class="status-badge paid">${categories.length} items</span></div><div class="card-body"><div class="category-list">${categories.map((category,index) => `<div class="category-row"><i class="category-swatch" style="background:${COLORS[index%COLORS.length]}"></i><span>${escapeHtml(category)}</span><button class="delete-icon" data-action="delete-category" data-type="${type}" data-category="${escapeHtml(category)}" title="Delete category">×</button></div>`).join("")}</div><form class="category-add" data-category-form="${type}"><input name="category" maxlength="40" placeholder="New ${type} category" required><button class="secondary-button compact">Add</button></form></div></article>`;
+    return `<article class="card category-card" style="border-top:2px solid ${color}"><div class="card-header"><div><h3>${titleCase(type)}</h3><p>${escapeHtml(description)}</p></div><span class="status-badge paid">${categories.length} items</span></div><div class="card-body"><div class="category-list">${categories.map((category,index) => { const appearance = categoryAppearance(category,index); return `<div class="category-row"><i class="category-swatch" style="background:${appearance.color}"></i><span class="category-row-name">${escapeHtml(category)}</span>${type === "expense" ? `<label class="category-style-control" title="Category emoji"><input type="text" maxlength="4" value="${escapeHtml(appearance.emoji)}" data-category-emoji="${escapeHtml(category)}" aria-label="Emoji for ${escapeHtml(category)}"></label><label class="category-color-control" title="Category color"><input type="color" value="${appearance.color}" data-category-color="${escapeHtml(category)}" aria-label="Color for ${escapeHtml(category)}"></label>` : ""}<button class="delete-icon" data-action="delete-category" data-type="${type}" data-category="${escapeHtml(category)}" title="Delete category">×</button></div>`; }).join("")}</div><form class="category-add" data-category-form="${type}"><input name="category" maxlength="40" placeholder="New ${type} category" required><button class="secondary-button compact">Add</button></form></div></article>`;
   }
 
   function renderCategories() {
-    return `<div class="page-stack"><div class="section-heading"><div><h2>Customize your categories</h2><p>These categories appear automatically throughout the monthly planner and reports.</p></div></div><section class="category-grid">${renderCategoryCard("income","Pay sources and other money received","var(--mint)")}${renderCategoryCard("expense","Flexible spending categories","var(--violet)")}${renderCategoryCard("debt","Balances you want to reduce","var(--blue)")}${renderCategoryCard("savings","Goals and savings accounts","var(--gold)")}</section></div>`;
+    return `<div class="page-stack"><div class="section-heading"><div><h2>Customize your categories</h2><p>Choose expense emojis and colors to create the visual budget style you want.</p></div></div><section class="category-grid">${renderCategoryCard("income","Pay sources and other money received","var(--mint)")}${renderCategoryCard("expense","Flexible spending categories","var(--violet)")}${renderCategoryCard("debt","Balances you want to reduce","var(--blue)")}${renderCategoryCard("savings","Goals and savings accounts","var(--gold)")}</section></div>`;
   }
 
   function renderSettings() {
@@ -860,10 +883,12 @@
     const cloudEmail = cloudSession && cloudSession.user ? cloudSession.user.email : "";
     const hasRecoveryCopy = Boolean(localStorage.getItem("truebalance-recovery-backup-v1"));
     const shareCard = `<article class="card share-card"><div class="card-header"><div><h3>Share account</h3><p>Give another member full access to this budget</p></div><span class="status-badge ${usingSharedBudget() ? "paid" : "due"}">${usingSharedBudget() ? "Shared member" : "Owner"}</span></div><div class="card-body">${!cloudSession ? `<div class="info-callout">Connect Cloud Sync first. Every member uses their own email and password.</div>` : usingSharedBudget() ? `<div class="cloud-account"><div><span>Current budget</span><strong>Shared household budget</strong><small class="settings-hint">You have full editing access and your changes sync to every member.</small></div><button class="ghost-button" data-action="leave-shared-budget">Leave shared budget</button></div>` : `<div class="cloud-account"><div><span>Your private sharing code</span>${cloudShareCode ? `<div class="share-code-row"><strong class="share-code">${escapeHtml(cloudShareCode)}</strong><button class="secondary-button compact" data-action="copy-share-code">Copy</button><button class="ghost-button compact" data-action="create-share-code">New code</button></div><small class="settings-hint">Send this code only to the person you trust. A new code disables the previous invitation.</small>` : `<button class="secondary-button" data-action="create-share-code">Create sharing code</button>`}</div><div class="share-divider"><span>OR JOIN ANOTHER BUDGET</span></div><form id="joinBudgetForm" class="form-grid"><div class="field span-2"><label for="shareCodeInput">Invitation code</label><input id="shareCodeInput" name="shareCode" maxlength="20" autocomplete="off" placeholder="Enter the member code" required></div><div class="field span-2"><button class="primary-button">Join shared budget</button></div></form></div>`}</div></article>`;
+    const appearanceCard = `<article class="card appearance-card"><div class="card-header"><div><h3>Theme & appearance</h3><p>Make TrueBalance match your style</p></div><span class="status-badge paid">Custom</span></div><form class="card-body form-grid" id="appearanceForm"><div class="field span-2"><label for="visualThemeSelect">Visual style</label><select id="visualThemeSelect" name="visualTheme"><option value="classic" ${data.settings.visualTheme === "classic" ? "selected" : ""}>TrueBalance Classic</option><option value="midnight" ${data.settings.visualTheme === "midnight" ? "selected" : ""}>Midnight Blue — reference style</option><option value="black" ${data.settings.visualTheme === "black" ? "selected" : ""}>Deep Black</option></select></div><div class="theme-preview span-2"><i class="theme-sample classic"></i><i class="theme-sample midnight"></i><i class="theme-sample black"></i></div><div class="field"><label for="accentColorInput">Accent color</label><input id="accentColorInput" name="accentColor" type="color" value="${escapeHtml(data.settings.accentColor)}"></div><div class="field"><label for="cornerStyleSelect">Card corners</label><select id="cornerStyleSelect" name="cornerStyle"><option value="rounded" ${data.settings.cornerStyle === "rounded" ? "selected" : ""}>Extra rounded</option><option value="soft" ${data.settings.cornerStyle === "soft" ? "selected" : ""}>Soft</option><option value="square" ${data.settings.cornerStyle === "square" ? "selected" : ""}>Square</option></select></div><div class="field"><label for="densitySelect">Spacing</label><select id="densitySelect" name="density"><option value="comfortable" ${data.settings.density === "comfortable" ? "selected" : ""}>Comfortable</option><option value="compact" ${data.settings.density === "compact" ? "selected" : ""}>Compact</option></select></div><div class="field"><label for="categoryStyleSelect">Category labels</label><select id="categoryStyleSelect" name="categoryStyle"><option value="pills" ${data.settings.categoryStyle === "pills" ? "selected" : ""}>Color pills + emoji</option><option value="simple" ${data.settings.categoryStyle === "simple" ? "selected" : ""}>Simple text</option></select></div><div class="field span-2"><button class="primary-button">Apply appearance</button></div></form></article>`;
     return `<div class="page-stack">
       <div class="section-heading"><div><h2>Planner settings</h2><p>Choose your year and currency, then back up or move your budget whenever you want.</p></div></div>
       <section class="settings-grid">
         <article class="card"><div class="card-header"><div><h3>General</h3><p>Used across the entire planner</p></div></div><form class="card-body form-grid" id="settingsForm"><div class="field span-2"><label for="budgetName">Budget name</label><input id="budgetName" name="name" value="${escapeHtml(data.settings.name)}" maxlength="60"></div><div class="field"><label for="planYear">Plan year</label><input id="planYear" name="year" type="number" min="2000" max="2100" value="${number(data.settings.year)}"></div><div class="field"><label for="currencySelect">Currency</label><select id="currencySelect" name="currency">${["USD","CAD","EUR","GBP","AUD","MXN","JPY","INR"].map(code => `<option ${data.settings.currency===code ? "selected" : ""}>${code}</option>`).join("")}</select></div><div class="field span-2"><label for="fontSizeSelect">App font size</label><select id="fontSizeSelect" name="fontSize">${[["small","Small"],["standard","Standard"],["large","Large"],["xlarge","Extra large"]].map(([value,label]) => `<option value="${value}" ${data.settings.fontSize===value ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field span-2"><button class="primary-button">Save settings</button></div></form></article>
+        ${appearanceCard}
         <article class="card"><div class="card-header"><div><h3>Backup & restore</h3><p>Keep a portable copy of your planner</p></div></div><div class="card-body page-stack" style="gap:14px"><div class="info-callout">TrueBalance always keeps a local device copy. Export a backup before clearing browser data or replacing a device.</div><div class="settings-actions"><button class="secondary-button" data-action="export-json">Export backup</button><button class="ghost-button" data-action="import-json">Import backup</button><button class="ghost-button" data-action="export-csv">Export transactions CSV</button></div></div></article>
         <article class="card cloud-card"><div class="card-header"><div><h3>Cloud sync</h3><p>Use the same budget on all your devices</p></div><span class="status-badge ${cloudSession ? "paid" : "due"}">${cloudSession ? "Connected" : "Not connected"}</span></div><div class="card-body">${!cloudReady ? `<div class="info-callout">Cloud sync is ready to connect, but your Supabase project details still need to be added to <strong>config.js</strong>. Follow SUPABASE-SETUP.md.</div>` : cloudSession ? `<div class="cloud-account"><div><span>Signed in as</span><strong>${escapeHtml(cloudEmail)}</strong><small id="cloudRealtimeStatus" class="cloud-live-status">${realtimeStatus === "live" ? "Live on this device" : "Connecting…"}</small></div><div class="info-callout">Live sync sends saved changes to your other open devices automatically. Downloading a cloud copy first creates a recovery copy on this device.</div><div class="settings-actions"><button class="secondary-button" data-action="sync-cloud">Sync now</button><button class="ghost-button" data-action="download-cloud">Download cloud copy</button>${hasRecoveryCopy ? `<button class="ghost-button" data-action="restore-recovery">Restore last local copy</button>` : ""}<button class="ghost-button" data-action="sign-out-cloud">Sign out</button></div></div>` : `<form id="cloudAuthForm" class="form-grid"><div class="field span-2"><label for="cloudEmail">Email</label><input id="cloudEmail" name="email" type="email" autocomplete="email" required></div><div class="field span-2"><label for="cloudPassword">Password</label><input id="cloudPassword" name="password" type="password" minlength="6" autocomplete="current-password" required></div><div class="field span-2 settings-actions"><button class="primary-button" name="mode" value="signin">Sign in</button><button class="secondary-button" name="mode" value="signup">Create account</button></div></form>`}</div></article>
         ${shareCard}
@@ -990,6 +1015,10 @@
 
   function render() {
     document.body.dataset.fontSize = data.settings.fontSize;
+    document.body.dataset.visualTheme = data.settings.visualTheme;
+    document.body.dataset.cornerStyle = data.settings.cornerStyle;
+    document.body.dataset.density = data.settings.density;
+    document.documentElement.style.setProperty("--mint", data.settings.accentColor);
     const renderers = {
       dashboard: renderDashboard,
       monthly: renderMonthly,
@@ -1115,6 +1144,20 @@
       render();
       toast(`${value} added`);
     }));
+    app.querySelectorAll("[data-category-color]").forEach(input => input.addEventListener("change", () => {
+      const category = input.dataset.categoryColor;
+      data.settings.categoryAppearance[category] = { ...(data.settings.categoryAppearance[category] || {}), color: input.value };
+      saveData();
+      render();
+      toast(`${category} color saved`);
+    }));
+    app.querySelectorAll("[data-category-emoji]").forEach(input => input.addEventListener("change", () => {
+      const category = input.dataset.categoryEmoji;
+      data.settings.categoryAppearance[category] = { ...(data.settings.categoryAppearance[category] || {}), emoji: input.value.trim() || "•" };
+      saveData();
+      render();
+      toast(`${category} emoji saved`);
+    }));
 
     app.querySelectorAll("[data-todo-form]").forEach(form => form.addEventListener("submit", event => {
       event.preventDefault();
@@ -1158,6 +1201,19 @@
       headerYear.textContent = data.settings.year;
       render();
       toast("Settings saved");
+    });
+    const appearanceForm = document.getElementById("appearanceForm");
+    if (appearanceForm) appearanceForm.addEventListener("submit", event => {
+      event.preventDefault();
+      const form = new FormData(appearanceForm);
+      data.settings.visualTheme = String(form.get("visualTheme") || "classic");
+      data.settings.accentColor = String(form.get("accentColor") || "#79e7bc");
+      data.settings.cornerStyle = String(form.get("cornerStyle") || "rounded");
+      data.settings.density = String(form.get("density") || "comfortable");
+      data.settings.categoryStyle = String(form.get("categoryStyle") || "pills");
+      saveData();
+      render();
+      toast("Appearance updated");
     });
     const cloudAuthForm = document.getElementById("cloudAuthForm");
     if (cloudAuthForm) cloudAuthForm.addEventListener("submit", async event => {
