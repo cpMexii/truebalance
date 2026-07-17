@@ -40,6 +40,10 @@
   let cloudSession = loadCloudSession();
   let cloudTimer = null;
   let cloudBusy = false;
+  let realtimeClient = null;
+  let realtimeChannel = null;
+  let realtimeStatus = "offline";
+  let applyingRemoteCloud = false;
 
   const makeId = () => (globalThis.crypto && crypto.randomUUID)
     ? crypto.randomUUID()
@@ -147,7 +151,7 @@
   function saveData(showConfirmation = false, skipCloud = false) {
     data.meta = { ...(data.meta || {}), localUpdatedAt: new Date().toISOString() };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    if (!skipCloud && cloudSession) scheduleCloudSync();
+    if (!skipCloud && cloudSession && !applyingRemoteCloud) scheduleCloudSync();
     if (showConfirmation) toast("Changes saved");
   }
 
@@ -163,6 +167,49 @@
     cloudSession = session;
     if (session) localStorage.setItem(CLOUD_SESSION_KEY, JSON.stringify(session));
     else localStorage.removeItem(CLOUD_SESSION_KEY);
+    if (session) startRealtimeSync();
+    else stopRealtimeSync();
+  }
+
+  function stopRealtimeSync() {
+    if (realtimeClient && realtimeChannel) realtimeClient.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+    realtimeClient = null;
+    realtimeStatus = "offline";
+  }
+
+  function applyCloudData(incoming, announce = true, force = false) {
+    if (!incoming || typeof incoming !== "object") return false;
+    const incomingTime = Date.parse(incoming.meta && incoming.meta.localUpdatedAt || 0);
+    const localTime = Date.parse(data.meta && data.meta.localUpdatedAt || 0);
+    if (!force && incomingTime && localTime && incomingTime <= localTime) return false;
+    localStorage.setItem("truebalance-recovery-backup-v1", JSON.stringify(data));
+    applyingRemoteCloud = true;
+    data = normalizeData(incoming);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    applyingRemoteCloud = false;
+    applyNavOrder();
+    render();
+    if (announce) toast("Updated from another device");
+    return true;
+  }
+
+  async function startRealtimeSync() {
+    stopRealtimeSync();
+    if (!cloudSession || !cloudConfigured() || typeof globalThis.TRUEBALANCE_CREATE_SUPABASE_CLIENT !== "function") return;
+    const client = globalThis.TRUEBALANCE_CREATE_SUPABASE_CLIENT(CLOUD_CONFIG.url, CLOUD_CONFIG.anonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    realtimeClient = client;
+    await client.realtime.setAuth(cloudSession.access_token);
+    if (realtimeClient !== client || !cloudSession) return;
+    realtimeChannel = client.channel(`truebalance-${cloudSession.user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "budgets", filter: `user_id=eq.${cloudSession.user.id}` }, payload => {
+        if (payload.eventType !== "DELETE" && payload.new && payload.new.data) applyCloudData(payload.new.data);
+      })
+      .subscribe(status => {
+        realtimeStatus = status === "SUBSCRIBED" ? "live" : status.toLowerCase();
+        const indicator = document.getElementById("cloudRealtimeStatus");
+        if (indicator) indicator.textContent = realtimeStatus === "live" ? "Live on this device" : "Connecting…";
+      });
   }
 
   async function cloudRequest(path, options = {}) {
@@ -198,7 +245,7 @@
 
   function scheduleCloudSync() {
     clearTimeout(cloudTimer);
-    cloudTimer = setTimeout(() => uploadCloud(true), 1200);
+    cloudTimer = setTimeout(() => uploadCloud(true), 250);
   }
 
   async function getCloudBudget() {
@@ -210,10 +257,7 @@
   async function downloadCloud() {
     const row = await getCloudBudget();
     if (!row) return false;
-    data = normalizeData(row.data);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    applyNavOrder();
-    render();
+    applyCloudData(row.data, false, true);
     return true;
   }
 
@@ -223,12 +267,8 @@
     if (!row) { await uploadCloud(true); return; }
     const cloudTime = Date.parse(row.data && row.data.meta && row.data.meta.localUpdatedAt || row.updated_at || 0);
     const localTime = Date.parse(data.meta && data.meta.localUpdatedAt || 0);
-    if (cloudTime > localTime) {
-      data = normalizeData(row.data);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      applyNavOrder();
-      render();
-    } else if (localTime > cloudTime) await uploadCloud(true);
+    if (!localTime || cloudTime >= localTime) applyCloudData(row.data, false, true);
+    else toast("This device has newer changes. Tap Sync now to upload them.");
   }
 
   async function signInCloud(email, password, createAccount) {
@@ -751,7 +791,7 @@
       <section class="settings-grid">
         <article class="card"><div class="card-header"><div><h3>General</h3><p>Used across the entire planner</p></div></div><form class="card-body form-grid" id="settingsForm"><div class="field span-2"><label for="budgetName">Budget name</label><input id="budgetName" name="name" value="${escapeHtml(data.settings.name)}" maxlength="60"></div><div class="field"><label for="planYear">Plan year</label><input id="planYear" name="year" type="number" min="2000" max="2100" value="${number(data.settings.year)}"></div><div class="field"><label for="currencySelect">Currency</label><select id="currencySelect" name="currency">${["USD","CAD","EUR","GBP","AUD","MXN","JPY","INR"].map(code => `<option ${data.settings.currency===code ? "selected" : ""}>${code}</option>`).join("")}</select></div><div class="field span-2"><label for="fontSizeSelect">App font size</label><select id="fontSizeSelect" name="fontSize">${[["small","Small"],["standard","Standard"],["large","Large"],["xlarge","Extra large"]].map(([value,label]) => `<option value="${value}" ${data.settings.fontSize===value ? "selected" : ""}>${label}</option>`).join("")}</select></div><div class="field span-2"><button class="primary-button">Save settings</button></div></form></article>
         <article class="card"><div class="card-header"><div><h3>Backup & restore</h3><p>Keep a portable copy of your planner</p></div></div><div class="card-body page-stack" style="gap:14px"><div class="info-callout">TrueBalance always keeps a local device copy. Export a backup before clearing browser data or replacing a device.</div><div class="settings-actions"><button class="secondary-button" data-action="export-json">Export backup</button><button class="ghost-button" data-action="import-json">Import backup</button><button class="ghost-button" data-action="export-csv">Export transactions CSV</button></div></div></article>
-        <article class="card cloud-card"><div class="card-header"><div><h3>Cloud sync</h3><p>Use the same budget on all your devices</p></div><span class="status-badge ${cloudSession ? "paid" : "due"}">${cloudSession ? "Connected" : "Not connected"}</span></div><div class="card-body">${!cloudReady ? `<div class="info-callout">Cloud sync is ready to connect, but your Supabase project details still need to be added to <strong>config.js</strong>. Follow SUPABASE-SETUP.md.</div>` : cloudSession ? `<div class="cloud-account"><div><span>Signed in as</span><strong>${escapeHtml(cloudEmail)}</strong></div><div class="settings-actions"><button class="secondary-button" data-action="sync-cloud">Sync now</button><button class="ghost-button" data-action="download-cloud">Download cloud copy</button><button class="ghost-button" data-action="sign-out-cloud">Sign out</button></div></div>` : `<form id="cloudAuthForm" class="form-grid"><div class="field span-2"><label for="cloudEmail">Email</label><input id="cloudEmail" name="email" type="email" autocomplete="email" required></div><div class="field span-2"><label for="cloudPassword">Password</label><input id="cloudPassword" name="password" type="password" minlength="6" autocomplete="current-password" required></div><div class="field span-2 settings-actions"><button class="primary-button" name="mode" value="signin">Sign in</button><button class="secondary-button" name="mode" value="signup">Create account</button></div></form>`}</div></article>
+        <article class="card cloud-card"><div class="card-header"><div><h3>Cloud sync</h3><p>Use the same budget on all your devices</p></div><span class="status-badge ${cloudSession ? "paid" : "due"}">${cloudSession ? "Connected" : "Not connected"}</span></div><div class="card-body">${!cloudReady ? `<div class="info-callout">Cloud sync is ready to connect, but your Supabase project details still need to be added to <strong>config.js</strong>. Follow SUPABASE-SETUP.md.</div>` : cloudSession ? `<div class="cloud-account"><div><span>Signed in as</span><strong>${escapeHtml(cloudEmail)}</strong><small id="cloudRealtimeStatus" class="cloud-live-status">${realtimeStatus === "live" ? "Live on this device" : "Connecting…"}</small></div><div class="info-callout">Live sync sends saved changes to your other open devices automatically. Downloading a cloud copy first creates a recovery copy on this device.</div><div class="settings-actions"><button class="secondary-button" data-action="sync-cloud">Sync now</button><button class="ghost-button" data-action="download-cloud">Download cloud copy</button><button class="ghost-button" data-action="sign-out-cloud">Sign out</button></div></div>` : `<form id="cloudAuthForm" class="form-grid"><div class="field span-2"><label for="cloudEmail">Email</label><input id="cloudEmail" name="email" type="email" autocomplete="email" required></div><div class="field span-2"><label for="cloudPassword">Password</label><input id="cloudPassword" name="password" type="password" minlength="6" autocomplete="current-password" required></div><div class="field span-2 settings-actions"><button class="primary-button" name="mode" value="signin">Sign in</button><button class="secondary-button" name="mode" value="signup">Create account</button></div></form>`}</div></article>
         <article class="card"><div class="card-header"><div><h3>Tab order</h3><p>Arrange the sidebar to fit your routine</p></div></div><div class="card-body"><div class="tab-order-list">${data.settings.tabOrder.map((tab,index) => `<div class="tab-order-row"><span class="tab-order-grip" aria-hidden="true">☰</span><span>${escapeHtml(VIEW_META[tab][1])}</span><div class="tab-order-actions"><button class="ghost-button compact" data-action="move-tab-up" data-tab="${tab}" ${index === 0 ? "disabled" : ""} aria-label="Move ${escapeHtml(VIEW_META[tab][1])} up">↑</button><button class="ghost-button compact" data-action="move-tab-down" data-tab="${tab}" ${index === data.settings.tabOrder.length-1 ? "disabled" : ""} aria-label="Move ${escapeHtml(VIEW_META[tab][1])} down">↓</button></div></div>`).join("")}</div><p class="settings-hint">On a computer, you can also drag tabs directly in the sidebar. Your order saves automatically.</p></div></article>
         <article class="card"><div class="card-header"><div><h3>Print</h3><p>Create a paper or PDF copy</p></div></div><div class="card-body"><p style="color:var(--muted);font-size:10px;line-height:1.6">Open the Annual Dashboard first, then use the print button to save a clean annual summary as a PDF.</p><button class="secondary-button" data-view-jump="dashboard">Open dashboard</button></div></article>
         <article class="card" style="border-color:rgba(255,112,133,.18)"><div class="card-header"><div><h3>Start over</h3><p>Permanently clear the planner in this browser</p></div></div><div class="card-body"><p style="color:var(--muted);font-size:10px;line-height:1.6">Export a backup first if you may need this information again.</p><button class="danger-button" data-action="reset-data">Reset all data</button></div></article>
@@ -1402,9 +1442,18 @@
     try { data = normalizeData(JSON.parse(event.newValue)); applyNavOrder(); render(); } catch { /* ignore */ }
   });
 
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && cloudSession && cloudConfigured()) {
+      refreshCloudSession().then(valid => { if (valid) { startRealtimeSync(); reconcileCloud().catch(() => {}); } });
+    }
+  });
+  window.addEventListener("online", () => {
+    if (cloudSession && cloudConfigured()) { startRealtimeSync(); reconcileCloud().catch(() => {}); }
+  });
+
   headerYear.textContent = data.settings.year;
   render();
-  if (cloudSession && cloudConfigured()) reconcileCloud().catch(() => { /* local copy remains available */ });
+  if (cloudSession && cloudConfigured()) { startRealtimeSync(); reconcileCloud().catch(() => { /* local copy remains available */ }); }
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("./sw.js").catch(() => { /* offline support is optional */ });
