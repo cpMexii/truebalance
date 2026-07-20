@@ -32,6 +32,9 @@ You can also double-click `index.html` yourself.
 - Editable bill and subscription icons, plus custom photo or logo uploads that sync with the budget
 - Movable Dashboard recurring-payment box with progress ring, paid/remaining totals, payment cards, quick checkoffs, month selection, and quick add
 - ZIP purchase tracker with automatic installment schedules, paid/overdue status, remaining balances, and Calendar integration
+- Credit debt tab for every credit card, including issuer, last four digits, balance, limit, APR, minimum payment, due date, and payment history
+- Credit-card payments automatically reduce balances and update monthly and annual debt totals
+- Movable, resizable Dashboard credit-debt box with card balances, utilization, total paid, and quick payment buttons
 - Paid ZIP installments automatically included in monthly, weekly, and annual spending totals
 - Check or clear every bill and subscription at once for a selected month
 - Automatic recurring-payment totals in monthly and annual expenses
