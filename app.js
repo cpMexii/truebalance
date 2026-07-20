@@ -10,13 +10,14 @@
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
   const RECURRING_ICONS = ["🧾","🏠","🔑","💡","💧","📱","🌐","🚙","🛡️","🎧","📺","🎮","💪","☁️","🐾","🎓","💳","✨"];
   const CATEGORY_EMOJIS = { housing:"🔑", rent:"🔑", car:"🚙", transportation:"🚙", groceries:"🥑", grocery:"🥑", dining:"🍔", restaurants:"🍔", clothing:"👕", personal:"👕", entertainment:"🎟️", utilities:"🏠", insurance:"🛡️", bills:"🧾", subscriptions:"📱", "zip payments":"💳", other:"✨" };
-  const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","zip","calendar","categories"];
-  const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","recurring-overview","monthly-spending","income-categories","highlights"];
-  const DASHBOARD_WIDGET_LABELS = { "cashflow":"Cash flow by month", "annual-spending":"Annual spending", "recurring-overview":"Recurring bills & subscriptions", "monthly-spending":"Monthly spending", "income-categories":"Income categories", "highlights":"Year highlights" };
+  const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","debts","zip","calendar","categories"];
+  const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","recurring-overview","credit-debt-overview","monthly-spending","income-categories","highlights"];
+  const DASHBOARD_WIDGET_LABELS = { "cashflow":"Cash flow by month", "annual-spending":"Annual spending", "recurring-overview":"Recurring bills & subscriptions", "credit-debt-overview":"Credit card debts", "monthly-spending":"Monthly spending", "income-categories":"Income categories", "highlights":"Year highlights" };
   const DEFAULT_DASHBOARD_SIZES = {
     "cashflow": { width: "wide", height: "normal", font: "standard" },
     "annual-spending": { width: "small", height: "normal", font: "standard" },
     "recurring-overview": { width: "full", height: "tall", font: "standard" },
+    "credit-debt-overview": { width: "full", height: "tall", font: "standard" },
     "monthly-spending": { width: "full", height: "tall", font: "standard" },
     "income-categories": { width: "half", height: "normal", font: "standard" },
     "highlights": { width: "half", height: "normal", font: "standard" }
@@ -26,6 +27,7 @@
     monthly: ["PLAN & TRACK", "Monthly budget"],
     transactions: ["ACTIVITY", "Transactions"],
     recurring: ["RECURRING PAYMENTS", "Bills & subscriptions"],
+    debts: ["CREDIT PAYOFF", "Credit debt"],
     zip: ["BUY NOW, PAY LATER", "ZIP payments"],
     calendar: ["PAYMENT DATES", "Calendar"],
     categories: ["CUSTOMIZE", "Categories"],
@@ -71,6 +73,7 @@
       },
       monthly: Array.from({ length: 12 }, freshMonth),
       recurring: [],
+      creditCards: [],
       zipPurchases: []
     };
   }
@@ -143,6 +146,21 @@
       item.paid = item.paid || {};
       item.icon = String(item.icon || "").slice(0, 12);
       if (!/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(String(item.image || ""))) item.image = "";
+    });
+    data.creditCards = Array.isArray(data.creditCards) ? data.creditCards : [];
+    data.creditCards.forEach(card => {
+      card.id = String(card.id || makeId());
+      card.name = String(card.name || "Credit card");
+      card.issuer = String(card.issuer || "");
+      card.lastFour = String(card.lastFour || "").replace(/\D/g, "").slice(-4);
+      card.balance = Math.max(0, number(card.balance));
+      card.startingBalance = Math.max(card.balance, number(card.startingBalance) || card.balance);
+      card.limit = Math.max(0, number(card.limit));
+      card.apr = Math.max(0, number(card.apr));
+      card.minimumPayment = Math.max(0, number(card.minimumPayment));
+      card.dueDay = Math.min(31, Math.max(1, number(card.dueDay) || 1));
+      card.color = /^#[0-9a-f]{6}$/i.test(String(card.color || "")) ? card.color : "#63b3ff";
+      card.payments = Array.isArray(card.payments) ? card.payments : [];
     });
     data.zipPurchases = Array.isArray(data.zipPurchases) ? data.zipPurchases : [];
     data.zipPurchases.forEach(purchase => {
@@ -429,6 +447,14 @@
     return zipPaymentsForMonth(index, true).reduce((sum, entry) => sum + number(entry.amount), 0);
   }
 
+  function creditDebtTotal() {
+    return data.creditCards.reduce((sum, card) => sum + number(card.balance), 0);
+  }
+
+  function creditDebtPaidTotal() {
+    return data.creditCards.reduce((sum, card) => sum + card.payments.reduce((paid, payment) => paid + number(payment.amount), 0), 0);
+  }
+
   function transactionTotal(index, category) {
     return monthData(index).transactions
       .filter(item => !category || item.category === category)
@@ -456,7 +482,7 @@
       income,
       expenses: transactions + bills + subscriptions + zip,
       budget: sumMap(month.budgets) + weeklyBudgetTotal(index),
-      debt: sumMap(month.debt),
+      debt: sumMap(month.debt) + creditDebtTotal(),
       savings: sumMap(month.savings),
       bills,
       subscriptions,
@@ -481,9 +507,9 @@
       income: months.reduce((sum, month) => sum + month.income, 0),
       expenses: months.reduce((sum, month) => sum + month.expenses, 0),
       budget: months.reduce((sum, month) => sum + month.budget, 0),
-      debt: lastDebt,
+      debt: lastDebt + creditDebtTotal(),
       savings: lastSavings,
-      debtReduction: firstDebt - lastDebt,
+      debtReduction: firstDebt - lastDebt + creditDebtPaidTotal(),
       savingsIncrease: lastSavings - firstSavings
     };
   }
@@ -603,6 +629,33 @@
     return `<div class="dashboard-recurring-body"><div class="dashboard-recurring-summary"><div><strong>${formatMoney(left)}</strong><span>left to pay</span></div><div class="recurring-progress-ring" style="--progress:${progress}%"><i></i></div><div><strong>${formatMoney(paid)}</strong><span>paid so far</span></div></div><div class="dashboard-recurring-label">THIS MONTH</div><div class="dashboard-recurring-grid">${itemCards}<button class="dashboard-recurring-add" data-action="add-recurring" aria-label="Add recurring payment"><span>+</span><small>Add payment</small></button></div>${items.length ? `<div class="dashboard-recurring-footer"><span>${items.filter(item => item.paid && item.paid[monthIndex]).length} of ${items.length} payments complete</span><button class="ghost-button compact" data-view-jump="recurring">View all payments</button></div>` : `<div class="empty-state"><div><strong>No recurring payments yet</strong><p>Add a bill or subscription here and it will connect to every budget total.</p></div></div>`}</div>`;
   }
 
+  function creditUtilization(card) {
+    return card.limit ? Math.min(100, number(card.balance) / number(card.limit) * 100) : 0;
+  }
+
+  function renderDashboardCreditDebt() {
+    const total = creditDebtTotal();
+    const paid = creditDebtPaidTotal();
+    const limits = data.creditCards.reduce((sum, card) => sum + number(card.limit), 0);
+    const utilization = limits ? Math.min(100, total / limits * 100) : 0;
+    const cards = data.creditCards.map(card => `<article class="dashboard-debt-item" style="--debt-color:${card.color}"><div class="debt-card-brand"><span>${escapeHtml((card.issuer || card.name).slice(0,2).toUpperCase())}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.issuer || "Credit card")}${card.lastFour ? ` · •••• ${escapeHtml(card.lastFour)}` : ""}</small></div></div><b>${formatMoney(card.balance)}</b><div class="debt-progress"><i style="width:${creditUtilization(card)}%"></i></div><footer><small>${card.limit ? `${Math.round(creditUtilization(card))}% utilized` : `${formatMoney(card.minimumPayment)} minimum`}</small><button class="secondary-button compact" data-action="pay-credit-card" data-id="${escapeHtml(card.id)}" ${number(card.balance) <= 0 ? "disabled" : ""}>Pay</button></footer></article>`).join("");
+    return `<div class="dashboard-debt-body"><div class="dashboard-recurring-summary debt-summary"><div><strong>${formatMoney(total)}</strong><span>credit debt remaining</span></div><div class="recurring-progress-ring debt-ring" style="--progress:${Math.max(0,100-utilization)}%"><i></i></div><div><strong>${formatMoney(paid)}</strong><span>payments recorded</span></div></div><div class="dashboard-recurring-label">YOUR CREDIT CARDS</div>${data.creditCards.length ? `<div class="dashboard-debt-grid">${cards}</div><div class="dashboard-recurring-footer"><span>${Math.round(utilization)}% total credit utilization</span><button class="ghost-button compact" data-view-jump="debts">Open credit debt tracker</button></div>` : `<div class="empty-state"><div><strong>No credit cards added</strong><p>Add each card once, then record payments to reduce the balances everywhere in TrueBalance.</p><button class="primary-button compact" data-action="add-credit-card">Add credit card</button></div></div>`}</div>`;
+  }
+
+  function renderCreditDebts() {
+    const total = creditDebtTotal();
+    const totalPaid = creditDebtPaidTotal();
+    const minimums = data.creditCards.reduce((sum, card) => sum + number(card.minimumPayment), 0);
+    const limits = data.creditCards.reduce((sum, card) => sum + number(card.limit), 0);
+    const utilization = limits ? total / limits * 100 : 0;
+    const cards = data.creditCards.map(card => {
+      const paid = card.payments.reduce((sum,payment) => sum + number(payment.amount),0);
+      return `<article class="card credit-card-account" style="--debt-color:${card.color}"><div class="credit-card-top"><div class="debt-card-brand"><span>${escapeHtml((card.issuer || card.name).slice(0,2).toUpperCase())}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.issuer || "Credit card")}${card.lastFour ? ` · •••• ${escapeHtml(card.lastFour)}` : ""}</small></div></div><div class="section-actions"><button class="ghost-button compact" data-action="edit-credit-card" data-id="${escapeHtml(card.id)}">Edit</button><button class="delete-icon" data-action="delete-credit-card" data-id="${escapeHtml(card.id)}">×</button></div></div><div class="credit-balance"><span>Current balance</span><strong>${formatMoney(card.balance)}</strong></div><div class="debt-progress"><i style="width:${creditUtilization(card)}%"></i></div><div class="credit-card-meta"><div><span>Credit limit</span><strong>${card.limit ? formatMoney(card.limit) : "—"}</strong></div><div><span>APR</span><strong>${card.apr ? `${card.apr.toFixed(2)}%` : "—"}</strong></div><div><span>Minimum</span><strong>${formatMoney(card.minimumPayment)}</strong></div><div><span>Due</span><strong>${card.dueDay}${card.dueDay === 1 ? "st" : card.dueDay === 2 ? "nd" : card.dueDay === 3 ? "rd" : "th"}</strong></div></div><footer><span>${formatMoney(paid)} paid since added</span><button class="primary-button" data-action="pay-credit-card" data-id="${escapeHtml(card.id)}" ${number(card.balance) <= 0 ? "disabled" : ""}>+ Record payment</button></footer></article>`;
+    }).join("");
+    const history = data.creditCards.flatMap(card => card.payments.map(payment => ({...payment,card}))).sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(0,20);
+    return `<div class="page-stack"><div class="section-heading"><div><h2>Credit debt payoff</h2><p>Track every credit card and watch balances decrease whenever you record a payment.</p></div><button class="primary-button" data-action="add-credit-card">+ Add credit card</button></div><section class="stats-grid debt-stats">${statCard("Total credit debt",formatMoney(total),`${data.creditCards.length} cards`,"var(--rose)")}${statCard("Total paid",formatMoney(totalPaid),"Recorded payments","var(--mint)")}${statCard("Monthly minimums",formatMoney(minimums),"Across all cards","var(--gold)")}${statCard("Credit utilization",`${Math.round(utilization)}%`,limits ? `${formatMoney(total)} of ${formatMoney(limits)}` : "Add credit limits","var(--blue)")}</section>${data.creditCards.length ? `<section class="credit-card-grid">${cards}</section>` : `<article class="card"><div class="empty-state"><div><strong>Add your first credit card</strong><p>Enter the current balance, APR, credit limit, minimum payment, and due date.</p><button class="primary-button" data-action="add-credit-card">Add credit card</button></div></div></article>`}<article class="card"><div class="card-header"><div><h3>Payment history</h3><p>Every recorded payment that reduced a card balance</p></div></div><div class="data-table-wrap">${history.length ? `<table class="data-table"><thead><tr><th>Date</th><th>Card</th><th>Note</th><th class="numeric">Payment</th></tr></thead><tbody>${history.map(payment => `<tr><td>${escapeHtml(payment.date)}</td><td><strong>${escapeHtml(payment.card.name)}</strong></td><td>${escapeHtml(payment.note || "Payment")}</td><td class="numeric delta-positive">-${formatMoney(payment.amount)}</td></tr>`).join("")}</tbody></table>` : `<div class="empty-state" style="min-height:130px"><div><strong>No payments recorded</strong><p>Your payment history will appear here.</p></div></div>`}</div></article></div>`;
+  }
+
   function renderDashboard() {
     const annual = annualTotals();
     const monthIncome = annual.months.map(month => month.income);
@@ -622,6 +675,7 @@
       "cashflow": widgetShell("cashflow", `<div class="card-header"><div><h3>Cash flow by month</h3><p>Income compared with actual spending</p></div><span class="status-badge ${net >= 0 ? "paid" : "due"}">${net >= 0 ? "Positive" : "Negative"}</span></div><div class="card-body chart-wrap">${renderLineChart(monthIncome, monthExpenses)}</div>`),
       "annual-spending": widgetShell("annual-spending", `<div class="card-header"><div><h3>Annual spending</h3><p>Actual expenses by category</p></div></div><div class="card-body">${renderDonut(expenseBreakdown)}</div>`),
       "recurring-overview": widgetShell("recurring-overview", `<div class="card-header"><div><h3>Recurring bills & subscriptions</h3><p>Track monthly payments without leaving the Dashboard</p></div><div class="section-actions"><select id="dashboardRecurringMonth" aria-label="Choose recurring-payment month">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select><button class="secondary-button compact" data-action="add-recurring">+ Add</button></div></div>${renderDashboardRecurring(state.dashboardMonth)}`),
+      "credit-debt-overview": widgetShell("credit-debt-overview", `<div class="card-header"><div><h3>Credit card debts</h3><p>Balances update whenever you record a payment</p></div><button class="secondary-button compact" data-action="add-credit-card">+ Add card</button></div>${renderDashboardCreditDebt()}`),
       "monthly-spending": widgetShell("monthly-spending", `<div class="card-header"><div><h3>Monthly spending</h3><p>Actual expenses by category for ${MONTHS[state.dashboardMonth]}</p></div><select id="dashboardSpendingMonth" aria-label="Choose month for spending wheel">${MONTHS.map((month,index) => `<option value="${index}" ${index===state.dashboardMonth ? "selected" : ""}>${month}</option>`).join("")}</select></div><div class="card-body">${renderDonut(monthlyExpenseBreakdown, `${SHORT_MONTHS[state.dashboardMonth]} SPENT`)}</div>`),
       "income-categories": widgetShell("income-categories", `<div class="card-header"><div><h3>Income categories</h3><p>Where your income came from</p></div></div><div class="card-body">${renderBars(incomeBreakdown)}</div>`),
       "highlights": widgetShell("highlights", `<div class="card-header"><div><h3>Year highlights</h3><p>Quick performance summary</p></div></div><div class="card-body"><div class="recurring-summary"><div class="mini-summary"><label>Highest income month</label><strong>${monthIncome[highestIncomeIndex] ? MONTHS[highestIncomeIndex] : "—"}</strong></div><div class="mini-summary"><label>Highest expense month</label><strong>${monthExpenses[highestExpenseIndex] ? MONTHS[highestExpenseIndex] : "—"}</strong></div><div class="mini-summary"><label>Debt reduction</label><strong class="${annual.debtReduction >= 0 ? "delta-positive" : "delta-negative"}">${formatMoney(annual.debtReduction)}</strong></div></div></div>`)
@@ -671,6 +725,7 @@
     }
     const rows = categories.map(category => `<tr><td>${escapeHtml(category)}</td><td class="numeric"><input class="table-input" type="number" min="0" step="0.01" value="${number(month[mapName][category]) || ""}" placeholder="0" data-month-map="${mapName}" data-category="${escapeHtml(category)}"></td></tr>`).join("");
     if (type === "income") return rows + `<tr><td>Dated weekly paychecks</td><td class="numeric">${escapeHtml(formatMoney(incomeEntryTotal(monthIndex)))}</td></tr><tr class="total-row"><td>Total</td><td class="numeric">${escapeHtml(formatMoney(monthTotals(monthIndex).income))}</td></tr>`;
+    if (type === "debt") return rows + `<tr><td>Credit card tracker</td><td class="numeric">${escapeHtml(formatMoney(creditDebtTotal()))}</td></tr><tr class="total-row"><td>Total</td><td class="numeric">${escapeHtml(formatMoney(monthTotals(monthIndex).debt))}</td></tr>`;
     return rows + `<tr class="total-row"><td>Total</td><td class="numeric">${escapeHtml(formatMoney(sumMap(month[mapName])))}</td></tr>`;
   }
 
@@ -1076,6 +1131,7 @@
       monthly: renderMonthly,
       transactions: renderTransactions,
       recurring: renderRecurring,
+      debts: renderCreditDebts,
       zip: renderZip,
       calendar: renderCalendar,
       categories: renderCategories,
@@ -1322,10 +1378,14 @@
     if (action === "add-income") openIncomeModal(state.month);
     if (action === "add-recurring") openRecurringModal(button.dataset.kind);
     if (action === "edit-recurring") openRecurringModal(undefined, button.dataset.id);
+    if (action === "add-credit-card") openCreditCardModal();
+    if (action === "edit-credit-card") openCreditCardModal(button.dataset.id);
+    if (action === "pay-credit-card") openCreditCardPaymentModal(button.dataset.id);
     if (action === "add-zip") openZipModal();
     if (action === "delete-transaction") deleteTransaction(button.dataset.id, number(button.dataset.month));
     if (action === "delete-income") deleteIncome(button.dataset.id, number(button.dataset.month));
     if (action === "delete-recurring") deleteRecurring(button.dataset.id);
+    if (action === "delete-credit-card") deleteCreditCard(button.dataset.id);
     if (action === "delete-zip") deleteZipPurchase(button.dataset.id);
     if (action === "delete-category") deleteCategory(button.dataset.type, button.dataset.category);
     if (action === "delete-todo") deleteTodo(button.dataset.id);
@@ -1442,6 +1502,15 @@
     saveData();
     render();
     toast("Recurring payment deleted");
+  }
+
+  function deleteCreditCard(id) {
+    const card = data.creditCards.find(entry => entry.id === id);
+    if (!card || !confirm(`Delete ${card.name} and its payment history?`)) return;
+    data.creditCards = data.creditCards.filter(entry => entry.id !== id);
+    saveData();
+    render();
+    toast("Credit card deleted");
   }
 
   function deleteZipPurchase(id) {
@@ -1577,6 +1646,60 @@
       closeModal();
       render();
       toast("Paycheck added");
+    });
+    modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
+  }
+
+  function openCreditCardModal(editId) {
+    const existing = editId ? data.creditCards.find(card => card.id === editId) : null;
+    if (editId && !existing) { toast("That credit card could not be found"); return; }
+    openModal(existing ? "Edit credit card" : "Add credit card", "CREDIT DEBT", `<div class="form-grid">
+      <div class="field span-2"><label>Card name</label><input name="name" maxlength="60" value="${escapeHtml(existing && existing.name || "")}" placeholder="Freedom, Platinum, Store card..." required></div>
+      <div class="field"><label>Bank or issuer</label><input name="issuer" maxlength="60" value="${escapeHtml(existing && existing.issuer || "")}" placeholder="Chase, Capital One..."></div>
+      <div class="field"><label>Last 4 digits</label><input name="lastFour" inputmode="numeric" maxlength="4" pattern="[0-9]{0,4}" value="${escapeHtml(existing && existing.lastFour || "")}" placeholder="1234"></div>
+      <div class="field"><label>Current balance</label><input name="balance" type="number" min="0" step="0.01" value="${existing ? number(existing.balance) : ""}" placeholder="0.00" required></div>
+      <div class="field"><label>Credit limit</label><input name="limit" type="number" min="0" step="0.01" value="${existing ? number(existing.limit) || "" : ""}" placeholder="0.00"></div>
+      <div class="field"><label>APR percentage</label><input name="apr" type="number" min="0" max="100" step="0.01" value="${existing ? number(existing.apr) || "" : ""}" placeholder="24.99"></div>
+      <div class="field"><label>Minimum payment</label><input name="minimumPayment" type="number" min="0" step="0.01" value="${existing ? number(existing.minimumPayment) || "" : ""}" placeholder="35.00"></div>
+      <div class="field"><label>Due day</label><input name="dueDay" type="number" min="1" max="31" value="${existing ? number(existing.dueDay) : 1}" required></div>
+      <div class="field"><label>Card color</label><input name="color" type="color" value="${escapeHtml(existing && existing.color || "#63b3ff")}"></div>
+    </div><div class="modal-actions"><button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">${existing ? "Save changes" : "Add card"}</button></div>`, form => {
+      const balance = Math.max(0,number(form.get("balance")));
+      const updated = {
+        id: existing ? existing.id : makeId(),
+        name: String(form.get("name") || "Credit card").trim(),
+        issuer: String(form.get("issuer") || "").trim(),
+        lastFour: String(form.get("lastFour") || "").replace(/\D/g,"").slice(-4),
+        balance,
+        startingBalance: existing ? Math.max(number(existing.startingBalance),balance) : balance,
+        limit: Math.max(0,number(form.get("limit"))),
+        apr: Math.max(0,number(form.get("apr"))),
+        minimumPayment: Math.max(0,number(form.get("minimumPayment"))),
+        dueDay: Math.min(31,Math.max(1,number(form.get("dueDay")))),
+        color: /^#[0-9a-f]{6}$/i.test(String(form.get("color"))) ? String(form.get("color")) : "#63b3ff",
+        payments: existing ? existing.payments : []
+      };
+      if (existing) Object.assign(existing,updated); else data.creditCards.push(updated);
+      saveData();
+      closeModal();
+      render();
+      toast(existing ? "Credit card updated" : "Credit card added");
+    });
+    modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
+  }
+
+  function openCreditCardPaymentModal(id) {
+    const card = data.creditCards.find(entry => entry.id === id);
+    if (!card) { toast("That credit card could not be found"); return; }
+    const localToday = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+    openModal(`Pay ${card.name}`, "RECORD PAYMENT", `<div class="payment-balance-callout"><span>Current balance</span><strong>${formatMoney(card.balance)}</strong></div><div class="form-grid"><div class="field"><label>Payment amount</label><input name="amount" type="number" min="0.01" max="${number(card.balance)}" step="0.01" value="${Math.min(number(card.minimumPayment),number(card.balance)) || ""}" placeholder="0.00" required></div><div class="field"><label>Payment date</label><input name="date" type="date" value="${localToday}" required></div><div class="field span-2"><label>Note</label><input name="note" maxlength="100" placeholder="Minimum payment, extra payment..."></div></div><div class="info-callout">This payment immediately reduces the card balance and updates credit debt throughout TrueBalance.</div><div class="modal-actions"><button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">Record payment</button></div>`, form => {
+      const amount = Math.min(number(card.balance),Math.max(.01,number(form.get("amount"))));
+      card.balance = Math.max(0,number(card.balance)-amount);
+      card.payments.push({ id:makeId(), date:String(form.get("date") || localToday), amount, note:String(form.get("note") || "").trim() });
+      saveData();
+      closeModal();
+      render();
+      toast(`${formatMoney(amount)} payment recorded`);
     });
     modalForm.querySelector("[data-modal-cancel]").addEventListener("click", closeModal);
   }
