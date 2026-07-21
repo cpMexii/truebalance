@@ -10,7 +10,7 @@
   const COLORS = ["#79e7bc","#a99af8","#76b6ff","#f3c969","#ff8e9f","#65d1e8","#d19af8","#8bc67c","#ef9f71","#9aa7ff"];
   const RECURRING_ICONS = ["🧾","🏠","🔑","💡","💧","📱","🌐","🚙","🛡️","🎧","📺","🎮","💪","☁️","🐾","🎓","💳","✨"];
   const CATEGORY_EMOJIS = { housing:"🔑", rent:"🔑", car:"🚙", transportation:"🚙", groceries:"🥑", grocery:"🥑", dining:"🍔", restaurants:"🍔", clothing:"👕", personal:"👕", entertainment:"🎟️", utilities:"🏠", insurance:"🛡️", bills:"🧾", subscriptions:"📱", "zip payments":"💳", other:"✨" };
-  const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","debts","zip","calendar","categories"];
+  const DEFAULT_TAB_ORDER = ["dashboard","monthly","transactions","recurring","debts","zip","calendar","boards","categories"];
   const DEFAULT_DASHBOARD_ORDER = ["cashflow","annual-spending","recurring-overview","credit-debt-overview","monthly-spending","income-categories","highlights"];
   const DASHBOARD_WIDGET_LABELS = { "cashflow":"Cash flow by month", "annual-spending":"Annual spending", "recurring-overview":"Recurring bills & subscriptions", "credit-debt-overview":"Credit card debts", "monthly-spending":"Monthly spending", "income-categories":"Income categories", "highlights":"Year highlights" };
   const DEFAULT_DASHBOARD_SIZES = {
@@ -30,6 +30,7 @@
     debts: ["CREDIT PAYOFF", "Credit debt"],
     zip: ["BUY NOW, PAY LATER", "ZIP payments"],
     calendar: ["PAYMENT DATES", "Calendar"],
+    boards: ["PLAN & ORGANIZE", "Boards"],
     categories: ["CUSTOMIZE", "Categories"],
     settings: ["PREFERENCES", "Settings & data"]
   };
@@ -74,6 +75,7 @@
       monthly: Array.from({ length: 12 }, freshMonth),
       recurring: [],
       creditCards: [],
+      boards: [],
       zipPurchases: []
     };
   }
@@ -162,6 +164,26 @@
       card.color = /^#[0-9a-f]{6}$/i.test(String(card.color || "")) ? card.color : "#63b3ff";
       card.payments = Array.isArray(card.payments) ? card.payments : [];
     });
+    data.boards = Array.isArray(data.boards) ? data.boards : [];
+    data.boards.forEach(board => {
+      board.id = String(board.id || makeId());
+      board.name = String(board.name || "Untitled board");
+      board.color = /^#[0-9a-f]{6}$/i.test(String(board.color || "")) ? board.color : "#087fbd";
+      board.lists = Array.isArray(board.lists) ? board.lists : [];
+      board.lists.forEach(list => {
+        list.id = String(list.id || makeId());
+        list.title = String(list.title || "List");
+        list.cards = Array.isArray(list.cards) ? list.cards : [];
+        list.cards.forEach(card => {
+          card.id = String(card.id || makeId());
+          card.title = String(card.title || "Card");
+          card.description = String(card.description || "");
+          card.dueDate = String(card.dueDate || "");
+          card.done = Boolean(card.done);
+          if (!/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(String(card.image || ""))) card.image = "";
+        });
+      });
+    });
     data.zipPurchases = Array.isArray(data.zipPurchases) ? data.zipPurchases : [];
     data.zipPurchases.forEach(purchase => {
       purchase.payments = Array.isArray(purchase.payments) ? purchase.payments : [];
@@ -191,6 +213,7 @@
     calendarMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
     recurringMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
     dashboardMonth: data.settings.year === today.getFullYear() ? today.getMonth() : 0,
+    boardId: null,
     dashboardArrange: false
     ,resizeBoxes: false
   };
@@ -964,6 +987,32 @@
     </div>`;
   }
 
+  function boardById(id = state.boardId) {
+    return data.boards.find(board => board.id === id);
+  }
+
+  function findBoardCard(board, cardId) {
+    for (const list of board.lists) {
+      const card = list.cards.find(item => item.id === cardId);
+      if (card) return { card, list };
+    }
+    return null;
+  }
+
+  function renderBoards() {
+    const board = boardById();
+    if (!board) {
+      const boardCards = data.boards.map(item => {
+        const cards = item.lists.reduce((sum,list) => sum + list.cards.length,0);
+        const complete = item.lists.reduce((sum,list) => sum + list.cards.filter(card => card.done).length,0);
+        return `<button class="board-library-card" style="--board-color:${item.color}" data-action="open-board" data-id="${escapeHtml(item.id)}"><span class="board-library-icon">▤</span><strong>${escapeHtml(item.name)}</strong><small>${item.lists.length} lists · ${cards} cards · ${complete} complete</small></button>`;
+      }).join("");
+      return `<div class="page-stack"><div class="section-heading"><div><h2>Your boards</h2><p>Create Trello-style boards for projects, household tasks, work, or anything else you want to organize.</p></div><button class="primary-button" data-action="add-board">+ Create board</button></div>${data.boards.length ? `<section class="board-library-grid">${boardCards}</section>` : `<article class="card"><div class="empty-state"><div><strong>Create your first board</strong><p>Add lists and cards, attach images, check off completed work, and move cards between lists.</p><button class="primary-button" data-action="add-board">Create board</button></div></div></article>`}</div>`;
+    }
+    const lists = board.lists.map(list => `<section class="trello-list" data-board-list="${escapeHtml(list.id)}"><header><h3>${escapeHtml(list.title)}</h3><div><button class="board-menu-button" data-action="edit-board-list" data-list="${escapeHtml(list.id)}" title="Edit list">✎</button><button class="board-menu-button" data-action="delete-board-list" data-list="${escapeHtml(list.id)}" title="Delete list">×</button></div></header><div class="trello-card-stack" data-card-drop-list="${escapeHtml(list.id)}">${list.cards.map(card => `<article class="trello-card ${card.done ? "complete" : ""}" draggable="true" data-board-card="${escapeHtml(card.id)}" data-list="${escapeHtml(list.id)}">${card.image ? `<img src="${escapeHtml(card.image)}" alt="">` : ""}<div class="trello-card-main"><input type="checkbox" data-board-card-check="${escapeHtml(card.id)}" ${card.done ? "checked" : ""} aria-label="Mark ${escapeHtml(card.title)} complete"><button data-action="edit-board-card" data-id="${escapeHtml(card.id)}"><strong>${escapeHtml(card.title)}</strong>${card.description ? `<small>${escapeHtml(card.description)}</small>` : ""}${card.dueDate ? `<em>Due ${escapeHtml(card.dueDate)}</em>` : ""}</button></div></article>`).join("")}</div><button class="trello-add-card" data-action="add-board-card" data-list="${escapeHtml(list.id)}">+ Add card</button></section>`).join("");
+    return `<div class="trello-board" style="--board-color:${board.color}"><div class="trello-board-header"><button class="board-close" data-action="close-board" aria-label="Back to boards">×</button><div><h2>${escapeHtml(board.name)}</h2><p>TrueBalance Boards</p></div><div class="section-actions"><button class="ghost-button compact" data-action="edit-board" data-id="${escapeHtml(board.id)}">Edit board</button><button class="danger-button compact" data-action="delete-board" data-id="${escapeHtml(board.id)}">Delete</button></div></div><div class="trello-lists">${lists}<button class="trello-add-list" data-action="add-board-list">+ Add another list</button></div></div>`;
+  }
+
   function renderTodos(monthIndex) {
     const todos = monthData(monthIndex).todos;
     return `<div class="todo-list">${todos.length ? todos.map(todo => `<div class="todo-row ${todo.done ? "done" : ""}"><input type="checkbox" data-toggle-todo="${escapeHtml(todo.id)}" ${todo.done ? "checked" : ""}><span>${escapeHtml(todo.text)}</span><button class="delete-icon" data-action="delete-todo" data-id="${escapeHtml(todo.id)}">×</button></div>`).join("") : `<div class="empty-state" style="min-height:80px;padding:10px"><div><strong>No tasks yet</strong><p>Add something you want to remember.</p></div></div>`}</div><form class="todo-add" data-todo-form><input name="todo" maxlength="100" placeholder="Add a new task..." required><button class="secondary-button compact">Add</button></form>`;
@@ -1134,6 +1183,7 @@
       debts: renderCreditDebts,
       zip: renderZip,
       calendar: renderCalendar,
+      boards: renderBoards,
       categories: renderCategories,
       settings: renderSettings
     };
@@ -1307,6 +1357,15 @@
       saveData();
       render();
     }));
+    app.querySelectorAll("[data-board-card-check]").forEach(input => input.addEventListener("change", () => {
+      const board = boardById();
+      const found = board && findBoardCard(board,input.dataset.boardCardCheck);
+      if (!found) return;
+      found.card.done = input.checked;
+      saveData();
+      render();
+    }));
+    if (state.view === "boards" && boardById()) bindBoardCardDragging();
 
     const monthFilter = document.getElementById("transactionMonthFilter");
     if (monthFilter) monthFilter.addEventListener("change", () => { state.transactionMonth = monthFilter.value; render(); });
@@ -1382,6 +1441,16 @@
     if (action === "edit-credit-card") openCreditCardModal(button.dataset.id);
     if (action === "pay-credit-card") openCreditCardPaymentModal(button.dataset.id);
     if (action === "add-zip") openZipModal();
+    if (action === "add-board") openBoardModal();
+    if (action === "edit-board") openBoardModal(button.dataset.id);
+    if (action === "open-board") { state.boardId = button.dataset.id; render(); }
+    if (action === "close-board") { state.boardId = null; render(); }
+    if (action === "delete-board") deleteBoard(button.dataset.id);
+    if (action === "add-board-list") openBoardListModal();
+    if (action === "edit-board-list") openBoardListModal(button.dataset.list);
+    if (action === "delete-board-list") deleteBoardList(button.dataset.list);
+    if (action === "add-board-card") openBoardCardModal(button.dataset.list);
+    if (action === "edit-board-card") openBoardCardModal(undefined, button.dataset.id);
     if (action === "delete-transaction") deleteTransaction(button.dataset.id, number(button.dataset.month));
     if (action === "delete-income") deleteIncome(button.dataset.id, number(button.dataset.month));
     if (action === "delete-recurring") deleteRecurring(button.dataset.id);
@@ -1548,6 +1617,81 @@
     monthData(monthIndex).todos = monthData(monthIndex).todos.filter(item => item.id !== id);
     saveData();
     render();
+  }
+
+  function openBoardModal(editId) {
+    const existing = editId ? data.boards.find(board => board.id === editId) : null;
+    openModal(existing ? "Edit board" : "Create board", "TRUEBALANCE BOARDS", `<div class="form-grid"><div class="field span-2"><label>Board name</label><input name="name" maxlength="70" value="${escapeHtml(existing && existing.name || "")}" placeholder="Ark server, House projects, Work..." required></div><div class="field span-2"><label>Board background</label><input name="color" type="color" value="${escapeHtml(existing && existing.color || "#087fbd")}"></div></div><div class="modal-actions"><button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">${existing ? "Save board" : "Create board"}</button></div>`, form => {
+      const board = { id:existing ? existing.id : makeId(), name:String(form.get("name") || "Untitled board").trim(), color:String(form.get("color") || "#087fbd"), lists:existing ? existing.lists : [] };
+      if (existing) Object.assign(existing,board); else data.boards.push(board);
+      state.boardId = board.id;
+      saveData(); closeModal(); render(); toast(existing ? "Board updated" : "Board created");
+    });
+    modalForm.querySelector("[data-modal-cancel]").addEventListener("click",closeModal);
+  }
+
+  function deleteBoard(id) {
+    const board = data.boards.find(item => item.id === id);
+    if (!board || !confirm(`Delete ${board.name} and all of its lists and cards?`)) return;
+    data.boards = data.boards.filter(item => item.id !== id);
+    state.boardId = null;
+    saveData(); render(); toast("Board deleted");
+  }
+
+  function openBoardListModal(listId) {
+    const board = boardById();
+    if (!board) return;
+    const existing = listId ? board.lists.find(list => list.id === listId) : null;
+    openModal(existing ? "Edit list" : "Add list", "BOARD LIST", `<div class="field"><label>List title</label><input name="title" maxlength="60" value="${escapeHtml(existing && existing.title || "")}" placeholder="To do, Fix and add, Completed..." required></div><div class="modal-actions"><button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">${existing ? "Save list" : "Add list"}</button></div>`, form => {
+      const list = { id:existing ? existing.id : makeId(), title:String(form.get("title") || "List").trim(), cards:existing ? existing.cards : [] };
+      if (existing) Object.assign(existing,list); else board.lists.push(list);
+      saveData(); closeModal(); render(); toast(existing ? "List updated" : "List added");
+    });
+    modalForm.querySelector("[data-modal-cancel]").addEventListener("click",closeModal);
+  }
+
+  function deleteBoardList(listId) {
+    const board = boardById();
+    const list = board && board.lists.find(item => item.id === listId);
+    if (!list || !confirm(`Delete ${list.title} and all cards inside it?`)) return;
+    board.lists = board.lists.filter(item => item.id !== listId);
+    saveData(); render(); toast("List deleted");
+  }
+
+  function openBoardCardModal(listId, cardId) {
+    const board = boardById();
+    if (!board) return;
+    const found = cardId ? findBoardCard(board,cardId) : null;
+    const existing = found && found.card;
+    const sourceList = found ? found.list : board.lists.find(list => list.id === listId);
+    if (!sourceList) return;
+    const image = existing && existing.image || "";
+    openModal(existing ? "Edit card" : "Add card", "BOARD CARD", `<div class="board-card-image-editor"><div id="boardCardImagePreview">${image ? `<img src="${escapeHtml(image)}" alt="">` : "▧"}</div><div><strong>Card image</strong><p>Optional photo or reference image</p></div></div><div class="form-grid"><div class="field span-2"><label>Card title</label><input name="title" maxlength="100" value="${escapeHtml(existing && existing.title || "")}" placeholder="What needs to be done?" required></div><div class="field span-2"><label>Description</label><textarea name="description" rows="3" maxlength="500" placeholder="Add more details...">${escapeHtml(existing && existing.description || "")}</textarea></div><div class="field"><label>List</label><select name="listId">${board.lists.map(list => `<option value="${escapeHtml(list.id)}" ${list.id===sourceList.id ? "selected" : ""}>${escapeHtml(list.title)}</option>`).join("")}</select></div><div class="field"><label>Due date</label><input name="dueDate" type="date" value="${escapeHtml(existing && existing.dueDate || "")}"></div><div class="field span-2"><label>Upload image</label><input id="boardCardImageFile" type="file" accept="image/*"><input id="boardCardImageData" name="image" type="hidden" value="${escapeHtml(image)}"></div><div class="field span-2"><button type="button" class="ghost-button compact" id="removeBoardCardImage" ${image ? "" : "disabled"}>Remove image</button></div></div><div class="modal-actions">${existing ? `<button type="button" class="danger-button" id="deleteBoardCard">Delete card</button>` : ""}<button type="button" class="ghost-button" data-modal-cancel>Cancel</button><button class="primary-button">${existing ? "Save card" : "Add card"}</button></div>`, form => {
+      const targetList = board.lists.find(list => list.id === String(form.get("listId"))) || sourceList;
+      const card = { id:existing ? existing.id : makeId(), title:String(form.get("title") || "Card").trim(), description:String(form.get("description") || "").trim(), dueDate:String(form.get("dueDate") || ""), done:existing ? existing.done : false, image:/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(String(form.get("image") || "")) ? String(form.get("image")) : "" };
+      if (existing) { sourceList.cards = sourceList.cards.filter(item => item.id !== existing.id); targetList.cards.push(card); } else targetList.cards.push(card);
+      saveData(); closeModal(); render(); toast(existing ? "Card updated" : "Card added");
+    });
+    const fileInput = modalForm.querySelector("#boardCardImageFile"), imageInput = modalForm.querySelector("#boardCardImageData"), preview = modalForm.querySelector("#boardCardImagePreview"), remove = modalForm.querySelector("#removeBoardCardImage");
+    fileInput.addEventListener("change",async () => { try { const converted = await imageFileToDataUrl(fileInput.files && fileInput.files[0]); imageInput.value=converted; preview.innerHTML=`<img src="${converted}" alt="">`; remove.disabled=false; } catch(error) { toast(error.message); } });
+    remove.addEventListener("click",() => { imageInput.value=""; fileInput.value=""; preview.textContent="▧"; remove.disabled=true; });
+    modalForm.querySelector("[data-modal-cancel]").addEventListener("click",closeModal);
+    const deleteButton = modalForm.querySelector("#deleteBoardCard");
+    if (deleteButton) deleteButton.addEventListener("click",() => { if (!confirm(`Delete ${existing.title}?`)) return; sourceList.cards = sourceList.cards.filter(item => item.id !== existing.id); saveData(); closeModal(); render(); toast("Card deleted"); });
+  }
+
+  function bindBoardCardDragging() {
+    const board = boardById();
+    let draggedId = null;
+    app.querySelectorAll("[data-board-card]").forEach(card => {
+      card.addEventListener("dragstart",event => { draggedId=card.dataset.boardCard; card.classList.add("dragging"); if(event.dataTransfer) event.dataTransfer.effectAllowed="move"; });
+      card.addEventListener("dragend",() => { card.classList.remove("dragging"); draggedId=null; });
+    });
+    app.querySelectorAll("[data-card-drop-list]").forEach(stack => {
+      stack.addEventListener("dragover",event => { if(draggedId){event.preventDefault();stack.classList.add("drag-over");} });
+      stack.addEventListener("dragleave",() => stack.classList.remove("drag-over"));
+      stack.addEventListener("drop",event => { event.preventDefault(); stack.classList.remove("drag-over"); const found=findBoardCard(board,draggedId); const target=board.lists.find(list => list.id===stack.dataset.cardDropList); if(!found||!target)return; found.list.cards=found.list.cards.filter(card => card.id!==draggedId); target.cards.push(found.card); saveData(); render(); toast("Card moved"); });
+    });
   }
 
   function openModal(title, eyebrow, html, onSubmit) {
