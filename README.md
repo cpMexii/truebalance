@@ -35,6 +35,8 @@ You can also double-click `index.html` yourself.
 - Credit debt tab for every credit card, including issuer, last four digits, balance, limit, APR, minimum payment, due date, and payment history
 - Credit-card payments automatically reduce balances and update monthly and annual debt totals
 - Movable, resizable Dashboard credit-debt box with card balances, utilization, total paid, and quick payment buttons
+- Trello-style Boards tab with multiple colored boards, horizontal lists, checklist cards, descriptions, due dates, and custom card images
+- Drag cards between board lists on desktop or move them from the card editor on iPhone
 - Paid ZIP installments automatically included in monthly, weekly, and annual spending totals
 - Check or clear every bill and subscription at once for a selected month
 - Automatic recurring-payment totals in monthly and annual expenses
