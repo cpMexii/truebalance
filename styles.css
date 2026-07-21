@@ -394,6 +394,48 @@ h3 { margin-bottom: 0; font-size: 14px; }
 .upcoming-row small { margin-top: 3px; color: var(--faint); font-size: 8px; }
 .upcoming-row > span:last-child { font-size: 9px; font-weight: 800; }
 
+.board-library-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px; }
+.board-library-card { position:relative; min-height:170px; overflow:hidden; display:grid; align-content:end; gap:7px; padding:20px; border:1px solid color-mix(in srgb,var(--board-color) 55%,var(--border)); border-radius:24px; background:linear-gradient(145deg,color-mix(in srgb,var(--board-color) 82%,#071525),color-mix(in srgb,var(--board-color) 45%,#00101d)); color:#fff; text-align:left; cursor:pointer; box-shadow:0 20px 45px rgba(0,0,0,.24); }
+.board-library-card::after { content:""; position:absolute; width:130px; height:130px; right:-38px; top:-42px; border-radius:50%; background:rgba(255,255,255,.1); }
+.board-library-icon { font-size:26px; opacity:.8; }
+.board-library-card strong { font-size:19px; }
+.board-library-card small { color:rgba(255,255,255,.72); font-size:9px; }
+.trello-board { min-height:calc(100vh - 165px); margin:-34px -38px -72px; padding:32px 30px 70px; background:linear-gradient(165deg,color-mix(in srgb,var(--board-color) 62%,#01253a),var(--board-color)); }
+.trello-board-header { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:16px; margin-bottom:34px; color:#fff; }
+.trello-board-header h2, .trello-board-header p { margin:0; }
+.trello-board-header h2 { font-size:24px; }
+.trello-board-header p { margin-top:5px; color:rgba(255,255,255,.65); font-size:11px; }
+.board-close { width:48px; height:48px; display:grid; place-items:center; border:1px solid rgba(255,255,255,.18); border-radius:50%; background:rgba(0,18,31,.3); color:#dff5ff; font-size:30px; font-weight:250; cursor:pointer; }
+.trello-lists { display:flex; align-items:flex-start; gap:16px; overflow-x:auto; padding:0 4px 24px; scroll-snap-type:x proximity; }
+.trello-list { width:330px; max-height:calc(100vh - 230px); flex:0 0 330px; overflow:hidden; display:flex; flex-direction:column; padding:14px; border:1px solid rgba(255,255,255,.08); border-radius:22px; background:#050709; color:#f1f4f8; box-shadow:0 16px 42px rgba(0,0,0,.35); scroll-snap-align:start; }
+.trello-list > header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:1px 4px 12px; }
+.trello-list > header h3 { font-size:17px; }
+.trello-list > header > div { display:flex; }
+.board-menu-button { width:29px; height:29px; padding:0; border:0; border-radius:8px; background:transparent; color:#96a0ad; font-size:17px; cursor:pointer; }
+.board-menu-button:hover { background:#202328; color:#fff; }
+.trello-card-stack { min-height:42px; overflow-y:auto; display:grid; gap:10px; padding:2px; border-radius:15px; }
+.trello-card-stack.drag-over { background:rgba(99,179,255,.12); box-shadow:inset 0 0 0 2px rgba(99,179,255,.4); }
+.trello-card { overflow:hidden; border:1px solid rgba(255,255,255,.06); border-radius:15px; background:#292b2f; box-shadow:0 5px 13px rgba(0,0,0,.25); cursor:grab; }
+.trello-card.dragging { opacity:.42; }
+.trello-card > img { width:100%; max-height:165px; display:block; object-fit:cover; }
+.trello-card-main { display:grid; grid-template-columns:28px minmax(0,1fr); align-items:start; gap:8px; padding:14px; }
+.trello-card-main input { width:22px; height:22px; margin:1px 0 0; accent-color:#63b3ff; }
+.trello-card-main button { min-width:0; padding:0; border:0; background:transparent; color:#e5e7eb; text-align:left; cursor:pointer; }
+.trello-card-main strong, .trello-card-main small, .trello-card-main em { display:block; }
+.trello-card-main strong { font-size:14px; line-height:1.4; }
+.trello-card-main small { margin-top:6px; color:#a5aab2; font-size:9px; line-height:1.45; }
+.trello-card-main em { margin-top:8px; color:#7bc3f4; font-size:8px; font-style:normal; }
+.trello-card.complete { opacity:.62; }
+.trello-card.complete strong { text-decoration:line-through; }
+.trello-add-card { min-height:42px; margin-top:10px; padding:0 8px; border:0; border-radius:12px; background:transparent; color:#b4bac3; text-align:left; cursor:pointer; }
+.trello-add-card:hover { background:#202328; color:#fff; }
+.trello-add-list { width:290px; min-height:54px; flex:0 0 290px; padding:0 18px; border:1px solid rgba(255,255,255,.16); border-radius:17px; background:rgba(1,20,34,.45); color:#e8f6ff; text-align:left; cursor:pointer; backdrop-filter:blur(12px); }
+.board-card-image-editor { display:grid; grid-template-columns:72px minmax(0,1fr); align-items:center; gap:14px; padding:13px; border:1px solid var(--border-soft); border-radius:18px; background:rgba(99,179,255,.055); }
+#boardCardImagePreview { width:64px; height:64px; overflow:hidden; display:grid; place-items:center; border-radius:17px; background:var(--surface-3); color:var(--blue); font-size:28px; }
+#boardCardImagePreview img { width:100%; height:100%; object-fit:cover; }
+.board-card-image-editor strong, .board-card-image-editor p { display:block; }
+.board-card-image-editor p { margin:5px 0 0; color:var(--muted); font-size:9px; }
+
 .category-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .category-card { overflow: hidden; }
 .category-list { display: grid; gap: 7px; }
@@ -814,6 +856,8 @@ body[data-visual-theme="midnight"] .toast { border-radius: 16px; background: #0b
   .dashboard-debt-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .credit-card-grid { grid-template-columns:1fr; }
   .debt-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .board-library-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .trello-board { margin:-24px -18px -40px; padding:24px 18px 50px; }
 }
 
 @media (max-width: 670px) {
@@ -822,6 +866,12 @@ body[data-visual-theme="midnight"] .toast { border-radius: 16px; background: #0b
   .credit-card-meta { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .credit-card-account { padding:15px; }
   .credit-balance strong { font-size:25px; }
+  .board-library-grid { grid-template-columns:1fr; }
+  .trello-board { margin:-20px -12px -34px; padding:20px 10px 44px; min-height:calc(100vh - 102px); }
+  .trello-board-header { grid-template-columns:auto minmax(0,1fr); gap:10px; margin-bottom:25px; }
+  .trello-board-header .section-actions { grid-column:1 / -1; }
+  .trello-list { width:280px; flex-basis:280px; max-height:calc(100vh - 225px); }
+  .trello-add-list { width:250px; flex-basis:250px; }
 }
 
 @media (max-width: 670px) {
